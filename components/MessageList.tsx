@@ -4,14 +4,15 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useEffect, useRef } from "react";
-import { Bot, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import { useUser } from "@clerk/nextjs";
 
 interface MessageListProps {
   conversationId: string;
   streamingMessages: any[];
+  isLoading?: boolean;
 }
 
 const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
@@ -33,12 +34,17 @@ const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
 export const MessageList = ({
   conversationId,
   streamingMessages,
+  isLoading = false,
 }: MessageListProps) => {
+  const { user } = useUser();
   const messages = useQuery(api.messages.getRecent, {
     conversationId: conversationId as Id<"conversations">,
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Get first letter of email for user avatar
+  const userInitial = user?.emailAddresses?.[0]?.emailAddress?.charAt(0).toUpperCase() || "U";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -86,44 +92,66 @@ export const MessageList = ({
         {allMessages.map((message) => (
           <div
             key={message.id}
-            className={`flex gap-4 ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
+            className="flex gap-4"
           >
-            {message.role === "assistant" && (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600">
-                <Bot size={18} className="text-white" />
-              </div>
-            )}
-            <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                message.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-zinc-800 text-zinc-100"
-              }`}
-            >
-              {message.imageStorageId && (
-                <MessageImage storageId={message.imageStorageId} />
-              )}
-              <div className="prose prose-invert max-w-none prose-p:my-0 prose-p:leading-normal">
-                <ReactMarkdown
-                  remarkPlugins={[remarkMath]}
-                  rehypePlugins={[rehypeKatex]}
-                >
-                  {message.content}
-                </ReactMarkdown>
-                {message.isStreaming && message.role === "assistant" && (
-                  <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-400" />
-                )}
-              </div>
-            </div>
-            {message.role === "user" && (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700">
-                <User size={18} className="text-white" />
-              </div>
+            {message.role === "user" ? (
+              <>
+                {/* User message - left aligned with blue background, first letter of email inside */}
+                <div className="max-w-[80%] rounded-2xl bg-blue-600 px-4 py-3 flex gap-3 items-start">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-white text-xs font-semibold">
+                    {userInitial}
+                  </div>
+                  <div className="flex-1">
+                    {message.imageStorageId && (
+                      <MessageImage storageId={message.imageStorageId} />
+                    )}
+                    <div className="prose prose-invert max-w-none prose-p:my-0 prose-p:leading-normal text-white">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Assistant message - left aligned, no background, no icon */}
+                <div className="flex-1">
+                  <div className="prose prose-invert max-w-none prose-p:my-2 prose-p:leading-relaxed">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                    {message.isStreaming && (
+                      <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-400" />
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         ))}
+
+        {/* Loading indicator */}
+        {isLoading && (
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 text-zinc-400">
+                <div className="flex gap-1">
+                  <div className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <div className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <div className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
     </div>

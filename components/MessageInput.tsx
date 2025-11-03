@@ -6,21 +6,24 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { Send, Image as ImageIcon, X } from "lucide-react";
+import { ArrowUp, Image as ImageIcon, X } from "lucide-react";
 
 interface MessageInputProps {
   conversationId: string;
   onStreamingMessages: (messages: any[]) => void;
+  onLoadingChange?: (isLoading: boolean) => void;
 }
 
 export const MessageInput = ({
   conversationId,
   onStreamingMessages,
+  onLoadingChange,
 }: MessageInputProps) => {
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   const addMessage = useMutation(api.messages.add);
   const updateLastActive = useMutation(api.conversations.updateLastActive);
@@ -102,13 +105,29 @@ export const MessageInput = ({
     onStreamingMessages([]);
   }, [conversationId, setMessages, onStreamingMessages]);
 
+  // Auto-focus input when conversation changes
+  useEffect(() => {
+    textInputRef.current?.focus();
+  }, [conversationId]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textInputRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [input]);
+
   // Update streaming messages when chatMessages change
   // Only sync when actually streaming (status is not "ready")
   useEffect(() => {
     if (status === "streaming") {
       onStreamingMessages(chatMessages);
+      // Turn off loading when streaming starts
+      onLoadingChange?.(false);
     }
-  }, [chatMessages, onStreamingMessages, status]);
+  }, [chatMessages, onStreamingMessages, status, onLoadingChange]);
 
   // Handle image selection
   const handleImageSelect = (file: File) => {
@@ -176,6 +195,17 @@ export const MessageInput = ({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Submit on Enter, but allow Shift+Enter for new line
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const form = e.currentTarget.form;
+      if (form) {
+        form.requestSubmit();
+      }
+    }
+  };
+
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if ((!input.trim() && !selectedImage) || status !== "ready") return;
@@ -184,6 +214,9 @@ export const MessageInput = ({
     let imageStorageId: Id<"_storage"> | null = null;
     const currentImage = selectedImage; // Store reference before clearing
     const currentImagePreview = imagePreview; // Store preview before clearing
+
+    // Set loading state
+    onLoadingChange?.(true);
 
     // Upload image if present
     if (currentImage) {
@@ -196,18 +229,18 @@ export const MessageInput = ({
     // Clear streaming messages before sending new message
     onStreamingMessages([]);
 
-    // Send to API - prepareSendMessagesRequest will include message history
-    sendMessage({
-      text: userMessage,
-      experimental_attachments: imageStorageId && currentImagePreview ? [{ url: currentImagePreview, contentType: currentImage?.type || "image/jpeg" }] : undefined,
-    });
-
-    // Save user message to Convex AFTER sending (so it doesn't duplicate in history)
+    // Save user message to Convex BEFORE sending
     await addMessage({
       conversationId: conversationId as Id<"conversations">,
       role: "user",
       content: userMessage,
       imageStorageId: imageStorageId || undefined,
+    });
+
+    // Send to API - prepareSendMessagesRequest will include message history
+    sendMessage({
+      text: userMessage,
+      experimental_attachments: imageStorageId && currentImagePreview ? [{ url: currentImagePreview, contentType: currentImage?.type || "image/jpeg" }] : undefined,
     });
 
     // Update conversation last active timestamp
@@ -217,7 +250,7 @@ export const MessageInput = ({
   };
 
   return (
-    <div className="border-t border-zinc-800 bg-zinc-900 p-4 shrink-0">
+    <div className="bg-zinc-900 p-6 shrink-0">
       <form onSubmit={onSubmit} className="mx-auto max-w-3xl">
         {/* Image Preview */}
         {imagePreview && (
@@ -230,51 +263,62 @@ export const MessageInput = ({
             <button
               type="button"
               onClick={clearImage}
-              className="absolute -top-2 -right-2 bg-red-600 rounded-full p-1 hover:bg-red-700 transition-colors"
+              className="cursor-pointer absolute -top-2 -right-2 bg-red-600 rounded-full p-1 hover:bg-red-700 transition-colors"
             >
               <X size={16} className="text-white" />
             </button>
           </div>
         )}
 
-        <div className="flex gap-2">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileInputChange}
-            className="hidden"
-          />
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileInputChange}
+          className="hidden"
+        />
 
-          {/* Image upload button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={status !== "ready"}
-            className="rounded-lg bg-zinc-800 px-4 py-3 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white disabled:opacity-50"
-            title="Upload image"
-          >
-            <ImageIcon size={20} />
-          </button>
+        {/* Input container with multi-row layout */}
+        <div className="rounded-2xl bg-zinc-800 p-4 focus-within:ring-2 focus-within:ring-blue-600">
+          {/* Text input row */}
+          <div className="mb-3">
+            <textarea
+              ref={textInputRef as any}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder="Type your math question or paste an image..."
+              rows={1}
+              className="w-full bg-transparent text-white placeholder-zinc-500 outline-none text-base resize-none overflow-y-auto"
+              style={{ minHeight: "24px", maxHeight: "200px" }}
+            />
+          </div>
 
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onPaste={handlePaste}
-            placeholder="Type your math question or paste an image..."
-            disabled={status !== "ready"}
-            className="flex-1 rounded-lg bg-zinc-800 px-4 py-3 text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={(!input.trim() && !selectedImage) || status !== "ready"}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send size={18} />
-            <span className="font-medium">Send</span>
-          </button>
+          {/* Icons row */}
+          <div className="flex items-center justify-between">
+            {/* Left side - image upload */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={status !== "ready"}
+              className="cursor-pointer rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Upload image"
+            >
+              <ImageIcon size={20} />
+            </button>
+
+            {/* Right side - send button */}
+            <button
+              type="submit"
+              disabled={(!input.trim() && !selectedImage) || status !== "ready"}
+              className="cursor-pointer rounded-lg bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Send"
+            >
+              <ArrowUp size={20} />
+            </button>
+          </div>
         </div>
       </form>
     </div>

@@ -4,15 +4,17 @@ import { useUser } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface NewConversationButtonProps {
-  onConversationCreated: (id: string) => void;
+  isCollapsed?: boolean;
 }
 
 export const NewConversationButton = ({
-  onConversationCreated,
+  isCollapsed = false,
 }: NewConversationButtonProps) => {
   const { user } = useUser();
+  const router = useRouter();
   const createConversation = useMutation(api.conversations.create);
 
   const handleCreateConversation = async () => {
@@ -24,16 +26,25 @@ export const NewConversationButton = ({
       title,
     });
 
-    onConversationCreated(conversationId);
+    // Navigate to the new conversation
+    router.push(`/chat/${conversationId}`);
   };
 
   return (
     <button
       onClick={handleCreateConversation}
-      className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-white transition-colors hover:bg-blue-700"
+      className="cursor-pointer flex items-center rounded-lg h-10 text-white transition-colors hover:bg-zinc-800 w-full"
+      aria-label="New chat"
+      title={isCollapsed ? "New chat" : undefined}
     >
-      <Plus size={20} />
-      <span className="font-medium">New Conversation</span>
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 transition-colors shrink-0">
+        <Plus size={16} />
+      </div>
+      {!isCollapsed && (
+        <span className="font-medium text-sm whitespace-nowrap ml-3">
+          New chat
+        </span>
+      )}
     </button>
   );
 };

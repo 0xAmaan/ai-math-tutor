@@ -1,14 +1,19 @@
 "use client";
 
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { ConversationSidebar } from "@/components/ConversationSidebar";
-import { ChatInterface } from "@/components/ChatInterface";
+import { HomePageInput } from "@/components/HomePageInput";
 import { useState } from "react";
+import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
 const Home = () => {
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Cmd+. to toggle sidebar
+  useKeyboardShortcut(
+    { key: ".", metaKey: true },
+    () => setIsSidebarCollapsed((prev) => !prev)
+  );
 
   return (
     <div className="flex h-screen bg-zinc-900">
@@ -22,7 +27,7 @@ const Home = () => {
               Your personal AI-powered math tutor
             </p>
             <SignInButton mode="modal">
-              <button className="rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700">
+              <button className="cursor-pointer rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700">
                 Sign In to Get Started
               </button>
             </SignInButton>
@@ -32,15 +37,20 @@ const Home = () => {
 
       <SignedIn>
         <ConversationSidebar
-          activeConversationId={activeConversationId}
-          onSelectConversation={setActiveConversationId}
+          activeConversationId={null}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <header className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-6 py-4 shrink-0">
-            <h1 className="text-xl font-semibold text-white">AI Math Tutor</h1>
-            <UserButton afterSignOutUrl="/" />
-          </header>
-          <ChatInterface conversationId={activeConversationId} />
+        <div className="flex flex-1 flex-col items-center justify-center overflow-hidden p-6">
+          <div className="mb-8 text-center">
+            <h1 className="mb-2 text-3xl font-semibold text-white">
+              AI Math Tutor
+            </h1>
+            <p className="text-zinc-400">
+              Ask me anything about math
+            </p>
+          </div>
+          <HomePageInput />
         </div>
       </SignedIn>
     </div>

@@ -10,6 +10,7 @@ interface ChatInterfaceProps {
 
 export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
   const [streamingMessages, setStreamingMessages] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!conversationId) {
     return (
@@ -28,13 +29,15 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <MessageList 
-        conversationId={conversationId} 
+      <MessageList
+        conversationId={conversationId}
         streamingMessages={streamingMessages}
+        isLoading={isLoading}
       />
-      <MessageInput 
+      <MessageInput
         conversationId={conversationId}
         onStreamingMessages={setStreamingMessages}
+        onLoadingChange={setIsLoading}
       />
     </div>
   );
