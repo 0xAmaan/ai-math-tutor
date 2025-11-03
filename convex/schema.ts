@@ -8,12 +8,12 @@ export default defineSchema({
     createdAt: v.number(),
     lastActiveAt: v.number(),
   }).index("by_user_and_active", ["userId", "lastActiveAt"]),
-  
+
   messages: defineTable({
     conversationId: v.id("conversations"),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     timestamp: v.number(),
+    imageStorageId: v.optional(v.id("_storage")),
   }).index("by_conversation", ["conversationId", "timestamp"]),
 });
-

@@ -35,8 +35,8 @@ const Home = () => {
           activeConversationId={activeConversationId}
           onSelectConversation={setActiveConversationId}
         />
-        <div className="flex flex-1 flex-col">
-          <header className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-6 py-4">
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <header className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-6 py-4 shrink-0">
             <h1 className="text-xl font-semibold text-white">AI Math Tutor</h1>
             <UserButton afterSignOutUrl="/" />
           </header>

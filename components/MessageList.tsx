@@ -5,13 +5,35 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useEffect, useRef } from "react";
 import { Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 
 interface MessageListProps {
   conversationId: string;
   streamingMessages: any[];
 }
 
-export const MessageList = ({ conversationId, streamingMessages }: MessageListProps) => {
+const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
+  const imageUrl = useQuery(api.files.getImageUrl, { storageId });
+
+  if (!imageUrl) {
+    return <div className="h-32 w-32 animate-pulse rounded bg-zinc-700" />;
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt="Uploaded problem"
+      className="mb-2 max-h-64 rounded-lg border border-zinc-700"
+    />
+  );
+};
+
+export const MessageList = ({
+  conversationId,
+  streamingMessages,
+}: MessageListProps) => {
   const messages = useQuery(api.messages.getRecent, {
     conversationId: conversationId as Id<"conversations">,
   });
@@ -27,20 +49,25 @@ export const MessageList = ({ conversationId, streamingMessages }: MessageListPr
       id: msg._id,
       role: msg.role,
       content: msg.content,
+      imageStorageId: msg.imageStorageId,
       isStreaming: false,
     })),
-    ...streamingMessages.map((msg) => {
-      const textContent = msg.parts
-        ?.filter((part: any) => part.type === "text")
-        .map((part: any) => part.text)
-        .join("") || "";
-      return {
-        id: msg.id,
-        role: msg.role,
-        content: textContent,
-        isStreaming: true,
-      };
-    }),
+    ...streamingMessages
+      .filter((msg) => msg.role === "assistant") // Only show streaming assistant messages
+      .map((msg) => {
+        const textContent =
+          msg.parts
+            ?.filter((part: any) => part.type === "text")
+            .map((part: any) => part.text)
+            .join("") || "";
+        return {
+          id: msg.id,
+          role: msg.role,
+          content: textContent,
+          imageStorageId: undefined,
+          isStreaming: true,
+        };
+      }),
   ];
 
   if (allMessages.length === 0) {
@@ -75,8 +102,16 @@ export const MessageList = ({ conversationId, streamingMessages }: MessageListPr
                   : "bg-zinc-800 text-zinc-100"
               }`}
             >
-              <div className="whitespace-pre-wrap wrap-break-word">
-                {message.content}
+              {message.imageStorageId && (
+                <MessageImage storageId={message.imageStorageId} />
+              )}
+              <div className="prose prose-invert max-w-none prose-p:my-0 prose-p:leading-normal">
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                >
+                  {message.content}
+                </ReactMarkdown>
                 {message.isStreaming && message.role === "assistant" && (
                   <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-400" />
                 )}
@@ -94,4 +129,3 @@ export const MessageList = ({ conversationId, streamingMessages }: MessageListPr
     </div>
   );
 };
-
