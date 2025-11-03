@@ -1,0 +1,34 @@
+{
+  "name": "ai-math-tutor",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "convex-dev": "npx convex dev",
+    "next-dev": "next dev --turbopack",
+    "dev": "concurrently \"npm run convex-dev\" \"npm run next-dev\"",
+    "build": "npx convex deploy && next build --turbopack",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.40",
+    "@ai-sdk/react": "^2.0.86",
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@clerk/nextjs": "^6.34.1",
+    "ai": "^5.0.86",
+    "convex": "^1.28.2",
+    "lucide-react": "^0.552.0",
+    "next": "16.0.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.1",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@tailwindcss/postcss": "^4.1.16",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "tailwindcss": "^4.1.16"
+  }
+}
