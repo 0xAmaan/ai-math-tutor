@@ -89,35 +89,72 @@ export const MessageList = ({
     return () => window.removeEventListener("resize", logDimensions);
   }, []);
 
+  // Deduplicate messages - if we have an optimistic message with same content as a real message, only show real one
+  const streamingMessagesProcessed = streamingMessages.map((msg) => {
+    // Handle optimistic user messages
+    if (msg.isOptimistic) {
+      return {
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        imageStorageId: msg.imageStorageId,
+        isStreaming: false,
+        isOptimistic: true,
+      };
+    }
+
+    // Handle streaming assistant messages
+    if (msg.role === "assistant") {
+      const textContent =
+        msg.parts
+          ?.filter((part: any) => part.type === "text")
+          .map((part: any) => part.text)
+          .join("") || "";
+      return {
+        id: msg.id,
+        role: msg.role,
+        content: textContent,
+        imageStorageId: undefined,
+        isStreaming: true,
+        isOptimistic: false,
+      };
+    }
+
+    return null;
+  }).filter(Boolean);
+
+  // Check if we have an optimistic message that matches a real message
+  const hasOptimisticMessage = streamingMessagesProcessed.some((msg: any) => msg.isOptimistic);
+  const lastRealMessage = messages?.[messages.length - 1];
+  const shouldHideLastReal = hasOptimisticMessage &&
+    lastRealMessage?.role === "user" &&
+    streamingMessagesProcessed.some((msg: any) =>
+      msg.isOptimistic && msg.content === lastRealMessage.content
+    );
+
   const allMessages = [
-    ...(messages || []).map((msg) => ({
-      id: msg._id,
-      role: msg.role,
-      content: msg.content,
-      imageStorageId: msg.imageStorageId,
-      isStreaming: false,
-    })),
-    ...streamingMessages
-      .filter((msg) => msg.role === "assistant") // Only show streaming assistant messages
-      .map((msg) => {
-        const textContent =
-          msg.parts
-            ?.filter((part: any) => part.type === "text")
-            .map((part: any) => part.text)
-            .join("") || "";
-        return {
-          id: msg.id,
-          role: msg.role,
-          content: textContent,
-          imageStorageId: undefined,
-          isStreaming: true,
-        };
-      }),
+    ...(messages || [])
+      .filter((msg, idx) => {
+        // Filter out the last real message if we have a matching optimistic one
+        if (shouldHideLastReal && idx === messages.length - 1) {
+          return false;
+        }
+        return true;
+      })
+      .map((msg) => ({
+        id: msg._id,
+        role: msg.role,
+        content: msg.content,
+        imageStorageId: msg.imageStorageId,
+        isStreaming: false,
+        isOptimistic: false,
+      })),
+    ...streamingMessagesProcessed,
   ];
 
   if (allMessages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
         <div className="text-center text-zinc-500">
           <p>No messages yet. Start the conversation!</p>
         </div>
@@ -134,7 +171,7 @@ export const MessageList = ({
 
   return (
     <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto bg-zinc-900 p-6">
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="mx-auto max-w-3xl">
         {allMessages.map((message, index) => {
           console.log("[UI DEBUG] Rendering message:", {
             index,
@@ -145,15 +182,28 @@ export const MessageList = ({
             isStreaming: message.isStreaming,
           });
 
+          // Determine spacing: user messages get small bottom margin, assistant messages get larger
+          const nextMessage = allMessages[index + 1];
+          const isLastMessage = index === allMessages.length - 1;
+          let marginBottom = 'mb-5'; // Default small margin for user messages (20px)
+
+          if (message.role === 'assistant') {
+            marginBottom = 'mb-8'; // Larger margin after assistant responses (32px)
+          }
+
+          if (isLastMessage) {
+            marginBottom = ''; // No margin on last message
+          }
+
           return (
             <div
               key={message.id}
-              className="flex gap-4"
+              className={`flex gap-4 ${marginBottom}`}
             >
               {message.role === "user" ? (
               <>
-                {/* User message - left aligned with blue background, first letter of email inside */}
-                <div className="max-w-[80%] rounded-2xl bg-blue-600 px-4 py-3 flex gap-3 items-start">
+                {/* User message - left aligned with sidebar background, first letter of email inside */}
+                <div className={`max-w-[80%] rounded-lg bg-zinc-950 px-4 py-3 flex gap-3 items-start ${(message as any).isOptimistic ? 'opacity-70' : ''}`}>
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-white text-xs font-semibold">
                     {userInitial}
                   </div>
@@ -176,16 +226,13 @@ export const MessageList = ({
               <>
                 {/* Assistant message - left aligned, no background, no icon */}
                 <div className="flex-1">
-                  <div className="prose prose-invert max-w-none prose-p:my-2 prose-p:leading-relaxed">
+                  <div className="prose prose-invert max-w-none prose-p:my-2" style={{ lineHeight: '1.8' }}>
                     <ReactMarkdown
                       remarkPlugins={[remarkMath]}
                       rehypePlugins={[rehypeKatex]}
                     >
                       {message.content}
                     </ReactMarkdown>
-                    {message.isStreaming && (
-                      <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-400" />
-                    )}
                   </div>
                 </div>
               </>

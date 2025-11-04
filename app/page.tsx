@@ -10,9 +10,8 @@ const Home = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Cmd+. to toggle sidebar
-  useKeyboardShortcut(
-    { key: ".", metaKey: true },
-    () => setIsSidebarCollapsed((prev) => !prev)
+  useKeyboardShortcut({ key: ".", metaKey: true }, () =>
+    setIsSidebarCollapsed((prev) => !prev),
   );
 
   return (
@@ -46,9 +45,7 @@ const Home = () => {
             <h1 className="mb-2 text-3xl font-semibold text-white">
               AI Math Tutor
             </h1>
-            <p className="text-zinc-400">
-              Ask me anything about math
-            </p>
+            <p className="text-zinc-400">Ask me anything about math</p>
           </div>
           <HomePageInput />
         </div>

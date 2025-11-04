@@ -38,7 +38,7 @@ const ChatsPage = () => {
       />
       <div className="flex flex-1 flex-col overflow-hidden p-6">
         <div className="mx-auto w-full max-w-4xl">
-          <h1 className="mb-6 text-3xl font-semibold text-white">All Chats</h1>
+          <h1 className="mb-6 text-3xl font-semibold text-white text-center">All Chats</h1>
 
           {conversations?.length === 0 ? (
             <div className="text-center text-zinc-500">

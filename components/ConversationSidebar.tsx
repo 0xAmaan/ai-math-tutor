@@ -25,8 +25,8 @@ export const ConversationSidebar = ({
     user?.id ? { userId: user.id } : "skip"
   );
 
-  // Get last 5 conversations for Recents section
-  const recentConversations = conversations?.slice(0, 5) || [];
+  // Get last 10 conversations for Recents section
+  const recentConversations = conversations?.slice(0, 10) || [];
 
   const handleNavigateHome = () => {
     router.push("/");
@@ -46,19 +46,19 @@ export const ConversationSidebar = ({
         isCollapsed ? "w-16" : "w-80"
       }`}
     >
-      {/* Header with collapse button */}
-      <div className="flex items-center px-3 py-3 shrink-0">
+      {/* Header with collapse button and title */}
+      <div className="flex items-center py-3 mb-4 shrink-0" style={{ paddingLeft: '12px', paddingRight: '12px' }}>
         <button
           onClick={onToggleCollapse}
-          className="cursor-pointer flex items-center justify-center h-8 w-8 rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white shrink-0"
+          className="cursor-pointer flex items-center justify-center rounded-lg h-10 w-10 text-zinc-400 transition-colors hover:text-white shrink-0"
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <PanelLeft size={18} />
+          <PanelLeft size={15} />
         </button>
         {!isCollapsed && (
           <button
             onClick={handleNavigateHome}
-            className="cursor-pointer ml-3 text-lg font-semibold text-white hover:text-zinc-300 transition-colors whitespace-nowrap"
+            className="cursor-pointer text-lg font-semibold text-white hover:text-zinc-300 transition-colors whitespace-nowrap"
           >
             AI Math Tutor
           </button>
@@ -66,19 +66,19 @@ export const ConversationSidebar = ({
       </div>
 
       {/* New conversation button */}
-      <div className="px-3 pt-1 shrink-0">
+      <div className="px-2 pt-1 shrink-0">
         <NewConversationButton isCollapsed={isCollapsed} />
       </div>
 
       {/* Chats button */}
-      <div className="px-3 pt-1 shrink-0">
+      <div className="px-2 pt-1 mb-6 shrink-0">
         <button
           onClick={handleNavigateChats}
-          className="cursor-pointer flex items-center rounded-lg h-10 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white w-full"
+          className={`cursor-pointer flex items-center rounded-lg h-10 px-3 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white ${isCollapsed ? '' : 'w-full'}`}
           title={isCollapsed ? "Chats" : undefined}
         >
-          <div className="flex h-8 w-8 items-center justify-center shrink-0">
-            <MessagesSquare size={18} />
+          <div className="flex h-6 w-6 items-center justify-center">
+            <MessagesSquare size={15} />
           </div>
           {!isCollapsed && (
             <span className="font-medium text-sm whitespace-nowrap ml-3">
@@ -126,16 +126,18 @@ export const ConversationSidebar = ({
       {isCollapsed && <div className="flex-1" />}
 
       {/* User button at bottom */}
-      <div className="flex items-center px-3 py-3 shrink-0">
-        <div className="flex h-8 w-8 items-center justify-center shrink-0">
-          <UserButton
-            afterSignOutUrl="/"
-            appearance={{
-              elements: {
-                avatarBox: "cursor-pointer"
-              }
-            }}
-          />
+      <div className="px-2 py-3 shrink-0">
+        <div className={`flex items-center rounded-lg h-10 px-3 transition-colors hover:bg-zinc-800 ${isCollapsed ? '' : 'w-full'}`}>
+          <div className="flex h-6 w-6 items-center justify-center shrink-0">
+            <UserButton
+              afterSignOutUrl="/"
+              appearance={{
+                elements: {
+                  avatarBox: "cursor-pointer"
+                }
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

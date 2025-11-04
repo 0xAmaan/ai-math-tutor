@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { useMutation, useQuery, useConvex } from "convex/react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { api } from "@/convex/_generated/api";
@@ -14,11 +14,15 @@ interface MessageInputProps {
   onLoadingChange?: (isLoading: boolean) => void;
 }
 
-export const MessageInput = ({
+export interface MessageInputRef {
+  triggerAutoSend: () => void;
+}
+
+export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
   conversationId,
   onStreamingMessages,
   onLoadingChange,
-}: MessageInputProps) => {
+}, ref) => {
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -28,6 +32,7 @@ export const MessageInput = ({
   // Store current image URL for access in prepareSendMessagesRequest
   const currentImageUrlRef = useRef<string | null>(null);
 
+  const convex = useConvex();
   const addMessage = useMutation(api.messages.add);
   const updateLastActive = useMutation(api.conversations.updateLastActive);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
@@ -175,6 +180,8 @@ export const MessageInput = ({
         previewLength: preview.length,
         previewPrefix: preview.substring(0, 50) + "...",
       });
+      // Refocus textarea after image is loaded
+      textInputRef.current?.focus();
     };
     reader.readAsDataURL(file);
   };
@@ -253,6 +260,93 @@ export const MessageInput = ({
     }
   };
 
+  // Expose triggerAutoSend method via ref for auto-triggering from ChatInterface
+  useImperativeHandle(ref, () => ({
+    triggerAutoSend: async () => {
+      console.log("[MessageInput] Auto-send triggered from ChatInterface", {
+        status,
+        hasRecentMessages: !!recentMessages,
+        recentMessagesCount: recentMessages?.length || 0,
+      });
+
+      // Trigger the AI response without needing user input
+      // The message is already saved in Convex, we just need to send to AI
+      if (status === "ready" && recentMessages && recentMessages.length > 0) {
+        const lastMessage = recentMessages[recentMessages.length - 1];
+        console.log("[MessageInput] Last message:", {
+          role: lastMessage.role,
+          content: lastMessage.content.substring(0, 50),
+          hasImage: !!lastMessage.imageStorageId,
+        });
+
+        if (lastMessage.role === "user") {
+          console.log("[MessageInput] Sending last user message to AI:", lastMessage.content);
+          onLoadingChange?.(true);
+
+          // If the message has an image, fetch it and convert to data URL
+          if (lastMessage.imageStorageId) {
+            try {
+              console.log("[MessageInput] Fetching image for auto-send, storageId:", lastMessage.imageStorageId);
+
+              // Get the image URL from Convex using the query
+              const imageUrl = await convex.query(api.files.getImageUrl, {
+                storageId: lastMessage.imageStorageId,
+              });
+
+              if (!imageUrl) {
+                console.error("[MessageInput] Failed to get image URL from Convex");
+                onLoadingChange?.(false);
+                return;
+              }
+
+              console.log("[MessageInput] Image URL retrieved from Convex:", imageUrl.substring(0, 50));
+
+              // Fetch the image as blob
+              const imageBlob = await fetch(imageUrl).then(r => r.blob());
+              console.log("[MessageInput] Image blob fetched, size:", imageBlob.size);
+
+              // Convert blob to data URL
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const dataUrl = reader.result as string;
+                console.log("[MessageInput] Image converted to data URL for auto-send, length:", dataUrl.length);
+                currentImageUrlRef.current = dataUrl;
+
+                console.log("[MessageInput] Calling sendMessage with image...");
+                // Send message with image
+                sendMessage({
+                  text: lastMessage.content,
+                });
+              };
+              reader.onerror = (error) => {
+                console.error("[MessageInput] FileReader error:", error);
+                onLoadingChange?.(false);
+              };
+              reader.readAsDataURL(imageBlob);
+              return; // Exit early, the reader callback will send the message
+            } catch (error) {
+              console.error("[MessageInput] Failed to fetch image for auto-send:", error);
+              onLoadingChange?.(false);
+              // Continue without image if fetch fails
+            }
+          }
+
+          console.log("[MessageInput] Calling sendMessage without image...");
+          // Send message without image
+          sendMessage({
+            text: lastMessage.content,
+          });
+        } else {
+          console.log("[MessageInput] Last message is not from user, skipping auto-send");
+          onLoadingChange?.(false);
+        }
+      } else {
+        console.log("[MessageInput] Cannot auto-send - conditions not met");
+        onLoadingChange?.(false);
+      }
+    },
+  }), [status, recentMessages, sendMessage, onLoadingChange, convex]);
+
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if ((!input.trim() && !selectedImage) || status !== "ready") return;
@@ -268,10 +362,26 @@ export const MessageInput = ({
       messageText: userMessage,
     });
 
+    // Create optimistic message for immediate display
+    const optimisticMessage = {
+      id: `optimistic-${Date.now()}`,
+      role: "user" as const,
+      content: userMessage,
+      imageStorageId: undefined,
+      isOptimistic: true,
+    };
+
+    // Clear input immediately for better UX
+    setInput("");
+    clearImage();
+
+    // Show optimistic message immediately
+    onStreamingMessages([optimisticMessage]);
+
     // Set loading state
     onLoadingChange?.(true);
 
-    // Upload image if present
+    // Upload image if present (in background)
     if (currentImage) {
       console.log("[OCR DEBUG - Frontend] Starting image upload...");
       imageStorageId = await uploadImage(currentImage);
@@ -283,13 +393,7 @@ export const MessageInput = ({
       }
     }
 
-    setInput("");
-    clearImage();
-
-    // Clear streaming messages before sending new message
-    onStreamingMessages([]);
-
-    // Save user message to Convex BEFORE sending
+    // Save user message to Convex (in background)
     console.log("[OCR DEBUG - Frontend] Saving message to Convex:", {
       conversationId,
       role: "user",
@@ -305,6 +409,9 @@ export const MessageInput = ({
     });
 
     console.log("[OCR DEBUG - Frontend] ✅ Message saved to Convex");
+
+    // Don't clear optimistic message yet - let it stay until streaming starts
+    // This prevents the jarring refresh when real message loads from Convex
 
     // Set the image URL in ref so prepareSendMessagesRequest can access it
     if (imageStorageId && currentImagePreview) {
@@ -343,7 +450,7 @@ export const MessageInput = ({
             <button
               type="button"
               onClick={clearImage}
-              className="cursor-pointer absolute -top-2 -right-2 bg-red-600 rounded-full p-1 hover:bg-red-700 transition-colors"
+              className="cursor-pointer absolute -top-2 -right-2 bg-zinc-600 rounded-full p-1 hover:bg-zinc-700 transition-colors"
             >
               <X size={16} className="text-white" />
             </button>
@@ -403,4 +510,6 @@ export const MessageInput = ({
       </form>
     </div>
   );
-};
+});
+
+MessageInput.displayName = "MessageInput";
