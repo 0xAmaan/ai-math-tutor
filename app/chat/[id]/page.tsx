@@ -18,13 +18,13 @@ const ConversationPage = () => {
   );
 
   return (
-    <div className="flex h-screen bg-zinc-900">
+    <div className="flex h-screen w-screen bg-zinc-900">
       <ConversationSidebar
         activeConversationId={conversationId}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex h-full flex-1 flex-col overflow-hidden">
         <ChatInterface conversationId={conversationId} />
       </div>
     </div>

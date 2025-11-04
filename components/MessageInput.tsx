@@ -25,6 +25,9 @@ export const MessageInput = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
 
+  // Store current image URL for access in prepareSendMessagesRequest
+  const currentImageUrlRef = useRef<string | null>(null);
+
   const addMessage = useMutation(api.messages.add);
   const updateLastActive = useMutation(api.conversations.updateLastActive);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
@@ -65,14 +68,34 @@ export const MessageInput = ({
         // Combine Convex history with current user message
         const finalMessages = [...convexHistory, ...currentMessages];
 
-        // Get imageUrl from custom data if present
-        const imageUrl = messages[messages.length - 1]?.experimental_attachments?.[0]?.url;
+        // Get imageUrl from ref (set in onSubmit)
+        const imageUrl = currentImageUrlRef.current;
+
+        console.log("[OCR DEBUG - Frontend] prepareSendMessagesRequest called:", {
+          convexHistoryCount: convexHistory.length,
+          currentMessagesCount: currentMessages.length,
+          finalMessagesCount: finalMessages.length,
+          hasImageUrl: !!imageUrl,
+          imageUrlLength: imageUrl?.length || 0,
+          imageUrlPrefix: imageUrl ? imageUrl.substring(0, 50) + "..." : "none",
+        });
+
+        const requestBody = {
+          messages: finalMessages,
+          imageUrl: imageUrl || null,
+        };
+
+        console.log("[OCR DEBUG - Frontend] Request body being sent to /api/chat:", {
+          messagesCount: requestBody.messages.length,
+          hasImageUrl: !!requestBody.imageUrl,
+          imageUrlType: requestBody.imageUrl ? "base64 DataURL" : "none",
+        });
+
+        // Clear the ref after using it
+        currentImageUrlRef.current = null;
 
         return {
-          body: {
-            messages: finalMessages,
-            imageUrl: imageUrl || null,
-          },
+          body: requestBody,
         };
       },
     }),
@@ -103,6 +126,7 @@ export const MessageInput = ({
   useEffect(() => {
     setMessages([]);
     onStreamingMessages([]);
+    currentImageUrlRef.current = null;
   }, [conversationId, setMessages, onStreamingMessages]);
 
   // Auto-focus input when conversation changes
@@ -136,10 +160,21 @@ export const MessageInput = ({
       return;
     }
 
+    console.log("[OCR DEBUG - Frontend] Image selected:", {
+      name: file.name,
+      type: file.type,
+      size: `${(file.size / 1024).toFixed(2)} KB`,
+    });
+
     setSelectedImage(file);
     const reader = new FileReader();
     reader.onloadend = () => {
-      setImagePreview(reader.result as string);
+      const preview = reader.result as string;
+      setImagePreview(preview);
+      console.log("[OCR DEBUG - Frontend] Image preview generated:", {
+        previewLength: preview.length,
+        previewPrefix: preview.substring(0, 50) + "...",
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -173,6 +208,7 @@ export const MessageInput = ({
   const clearImage = () => {
     setSelectedImage(null);
     setImagePreview(null);
+    currentImageUrlRef.current = null;
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -181,16 +217,27 @@ export const MessageInput = ({
   // Upload image to Convex storage
   const uploadImage = async (file: File): Promise<Id<"_storage"> | null> => {
     try {
+      console.log("[OCR DEBUG - Frontend] Requesting upload URL from Convex...");
       const uploadUrl = await generateUploadUrl();
+      console.log("[OCR DEBUG - Frontend] Upload URL received:", uploadUrl);
+
+      console.log("[OCR DEBUG - Frontend] Uploading file to Convex storage...");
       const result = await fetch(uploadUrl, {
         method: "POST",
         headers: { "Content-Type": file.type },
         body: file,
       });
+
       const { storageId } = await result.json();
+      console.log("[OCR DEBUG - Frontend] ✅ File uploaded successfully to Convex:", {
+        storageId,
+        fileType: file.type,
+        fileSize: `${(file.size / 1024).toFixed(2)} KB`,
+      });
+
       return storageId;
     } catch (error) {
-      console.error("Failed to upload image:", error);
+      console.error("[OCR DEBUG - Frontend] ❌ Failed to upload image:", error);
       return null;
     }
   };
@@ -215,12 +262,25 @@ export const MessageInput = ({
     const currentImage = selectedImage; // Store reference before clearing
     const currentImagePreview = imagePreview; // Store preview before clearing
 
+    console.log("[OCR DEBUG - Frontend] Form submitted:", {
+      hasText: !!input.trim(),
+      hasImage: !!selectedImage,
+      messageText: userMessage,
+    });
+
     // Set loading state
     onLoadingChange?.(true);
 
     // Upload image if present
     if (currentImage) {
+      console.log("[OCR DEBUG - Frontend] Starting image upload...");
       imageStorageId = await uploadImage(currentImage);
+
+      if (imageStorageId) {
+        console.log("[OCR DEBUG - Frontend] ✅ Image uploaded, storageId will be saved to Convex");
+      } else {
+        console.error("[OCR DEBUG - Frontend] ❌ Image upload failed, storageId is null");
+      }
     }
 
     setInput("");
@@ -230,6 +290,13 @@ export const MessageInput = ({
     onStreamingMessages([]);
 
     // Save user message to Convex BEFORE sending
+    console.log("[OCR DEBUG - Frontend] Saving message to Convex:", {
+      conversationId,
+      role: "user",
+      content: userMessage,
+      imageStorageId: imageStorageId || "none",
+    });
+
     await addMessage({
       conversationId: conversationId as Id<"conversations">,
       role: "user",
@@ -237,10 +304,23 @@ export const MessageInput = ({
       imageStorageId: imageStorageId || undefined,
     });
 
-    // Send to API - prepareSendMessagesRequest will include message history
+    console.log("[OCR DEBUG - Frontend] ✅ Message saved to Convex");
+
+    // Set the image URL in ref so prepareSendMessagesRequest can access it
+    if (imageStorageId && currentImagePreview) {
+      currentImageUrlRef.current = currentImagePreview;
+      console.log("[OCR DEBUG - Frontend] ✅ Image URL stored in ref for API request");
+    }
+
+    console.log("[OCR DEBUG - Frontend] Sending to chat API:", {
+      text: userMessage,
+      hasImageInRef: !!currentImageUrlRef.current,
+      imageUrlLength: currentImageUrlRef.current?.length || 0,
+      imageUrlPrefix: currentImageUrlRef.current?.substring(0, 50) + "..." || "none",
+    });
+
     sendMessage({
       text: userMessage,
-      experimental_attachments: imageStorageId && currentImagePreview ? [{ url: currentImagePreview, contentType: currentImage?.type || "image/jpeg" }] : undefined,
     });
 
     // Update conversation last active timestamp

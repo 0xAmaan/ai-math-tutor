@@ -18,6 +18,8 @@ interface MessageListProps {
 const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
   const imageUrl = useQuery(api.files.getImageUrl, { storageId });
 
+  console.log("[UI DEBUG] MessageImage render:", { storageId, hasUrl: !!imageUrl });
+
   if (!imageUrl) {
     return <div className="h-32 w-32 animate-pulse rounded bg-zinc-700" />;
   }
@@ -27,6 +29,8 @@ const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
       src={imageUrl}
       alt="Uploaded problem"
       className="mb-2 max-h-64 rounded-lg border border-zinc-700"
+      onLoad={() => console.log("[UI DEBUG] Image loaded:", storageId)}
+      onError={(e) => console.error("[UI DEBUG] Image load error:", storageId, e)}
     />
   );
 };
@@ -42,13 +46,48 @@ export const MessageList = ({
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Get first letter of email for user avatar
   const userInitial = user?.emailAddresses?.[0]?.emailAddress?.charAt(0).toUpperCase() || "U";
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = scrollContainerRef.current;
+    console.log("[UI DEBUG] Auto-scroll triggered:", {
+      messagesCount: messages?.length || 0,
+      streamingMessagesCount: streamingMessages?.length || 0,
+      hasMessagesEndRef: !!messagesEndRef.current,
+      hasScrollContainer: !!container,
+      scrollHeight: container?.scrollHeight,
+      clientHeight: container?.clientHeight,
+      offsetHeight: container?.offsetHeight,
+      scrollTop: container?.scrollTop,
+      canScroll: (container?.scrollHeight || 0) > (container?.clientHeight || 0),
+    });
+
+    if (messagesEndRef.current) {
+      console.log("[UI DEBUG] Scrolling to bottom...");
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, streamingMessages]);
+
+  // Log dimensions on mount and when window resizes
+  useEffect(() => {
+    const logDimensions = () => {
+      const container = scrollContainerRef.current;
+      console.log("[UI DEBUG] Container dimensions:", {
+        scrollHeight: container?.scrollHeight,
+        clientHeight: container?.clientHeight,
+        offsetHeight: container?.offsetHeight,
+        computedHeight: container ? window.getComputedStyle(container).height : "N/A",
+        computedMaxHeight: container ? window.getComputedStyle(container).maxHeight : "N/A",
+      });
+    };
+
+    logDimensions();
+    window.addEventListener("resize", logDimensions);
+    return () => window.removeEventListener("resize", logDimensions);
+  }, []);
 
   const allMessages = [
     ...(messages || []).map((msg) => ({
@@ -86,15 +125,32 @@ export const MessageList = ({
     );
   }
 
+  console.log("[UI DEBUG] MessageList rendering:", {
+    messagesLoaded: !!messages,
+    messagesCount: messages?.length || 0,
+    streamingMessagesCount: streamingMessages.length,
+    allMessagesCount: allMessages.length,
+  });
+
   return (
-    <div className="flex-1 overflow-y-auto bg-zinc-900 p-6">
+    <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto bg-zinc-900 p-6">
       <div className="mx-auto max-w-3xl space-y-6">
-        {allMessages.map((message) => (
-          <div
-            key={message.id}
-            className="flex gap-4"
-          >
-            {message.role === "user" ? (
+        {allMessages.map((message, index) => {
+          console.log("[UI DEBUG] Rendering message:", {
+            index,
+            id: message.id,
+            role: message.role,
+            hasImage: !!message.imageStorageId,
+            contentLength: message.content.length,
+            isStreaming: message.isStreaming,
+          });
+
+          return (
+            <div
+              key={message.id}
+              className="flex gap-4"
+            >
+              {message.role === "user" ? (
               <>
                 {/* User message - left aligned with blue background, first letter of email inside */}
                 <div className="max-w-[80%] rounded-2xl bg-blue-600 px-4 py-3 flex gap-3 items-start">
@@ -135,7 +191,8 @@ export const MessageList = ({
               </>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {/* Loading indicator */}
         {isLoading && (

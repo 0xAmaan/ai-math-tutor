@@ -28,17 +28,21 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <MessageList
-        conversationId={conversationId}
-        streamingMessages={streamingMessages}
-        isLoading={isLoading}
-      />
-      <MessageInput
-        conversationId={conversationId}
-        onStreamingMessages={setStreamingMessages}
-        onLoadingChange={setIsLoading}
-      />
+    <div className="flex h-full w-full flex-col">
+      <div className="relative flex-1">
+        <MessageList
+          conversationId={conversationId}
+          streamingMessages={streamingMessages}
+          isLoading={isLoading}
+        />
+      </div>
+      <div className="shrink-0">
+        <MessageInput
+          conversationId={conversationId}
+          onStreamingMessages={setStreamingMessages}
+          onLoadingChange={setIsLoading}
+        />
+      </div>
     </div>
   );
 };
