@@ -2,14 +2,26 @@
 
 import { ConversationSidebar } from "@/components/ConversationSidebar";
 import { ChatInterface } from "@/components/ChatInterface";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
 const ConversationPage = () => {
   const params = useParams();
   const conversationId = params.id as string;
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    // Initialize from localStorage if available
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebarCollapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
+
+  // Persist to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   // Cmd+. to toggle sidebar
   useKeyboardShortcut(

@@ -33,7 +33,6 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
     const hasExactlyOneUserMessage = messages.length === 1 && messages[0].role === "user";
 
     if (hasExactlyOneUserMessage) {
-      console.log("[ChatInterface] Detected first user message, auto-triggering AI response");
       hasTriggeredFirstResponseRef.current = true;
 
       // Trigger the auto-send via MessageInput

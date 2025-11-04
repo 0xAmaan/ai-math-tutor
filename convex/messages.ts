@@ -9,20 +9,10 @@ export const add = mutation({
     imageStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
-    console.log("[OCR DEBUG - Convex] Adding message to database:", {
-      conversationId: args.conversationId,
-      role: args.role,
-      contentLength: args.content.length,
-      hasImageStorageId: !!args.imageStorageId,
-      imageStorageId: args.imageStorageId || "none",
-    });
-
     const messageId = await ctx.db.insert("messages", {
       ...args,
       timestamp: Date.now(),
     });
-
-    console.log("[OCR DEBUG - Convex] ✅ Message saved with ID:", messageId);
 
     return messageId;
   },

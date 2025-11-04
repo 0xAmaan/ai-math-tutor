@@ -41,6 +41,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
     conversationId: conversationId as Id<"conversations">,
   });
 
+  // Log recentMessages whenever it changes
+  useEffect(() => {
+    console.log("[HISTORY DEBUG - Component] recentMessages updated:", {
+      count: recentMessages?.length || 0,
+      messages: recentMessages?.map((msg, idx) => ({
+        index: idx,
+        role: msg.role,
+        contentPreview: msg.content.substring(0, 50) + (msg.content.length > 50 ? '...' : ''),
+      })) || [],
+    });
+  }, [recentMessages]);
+
   const {
     sendMessage,
     status,
@@ -50,10 +62,16 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
     id: conversationId, // Tie chat session to conversationId
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      prepareSendMessagesRequest: ({ messages, id, trigger, messageId }) => {
+      prepareSendMessagesRequest: async ({ messages, id, trigger, messageId }) => {
+        // IMPORTANT: Fetch fresh messages from Convex RIGHT NOW
+        // Don't rely on recentMessages from closure as it may be stale
+        const freshMessages = await convex.query(api.messages.getRecent, {
+          conversationId: conversationId as Id<"conversations">,
+        });
+
         // Get Convex history (previous messages)
         const convexHistory =
-          recentMessages?.map((msg) => ({
+          freshMessages?.map((msg) => ({
             role: msg.role,
             content: msg.content,
           })) || [];
@@ -76,25 +94,29 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
         // Get imageUrl from ref (set in onSubmit)
         const imageUrl = currentImageUrlRef.current;
 
-        console.log("[OCR DEBUG - Frontend] prepareSendMessagesRequest called:", {
-          convexHistoryCount: convexHistory.length,
-          currentMessagesCount: currentMessages.length,
-          finalMessagesCount: finalMessages.length,
-          hasImageUrl: !!imageUrl,
-          imageUrlLength: imageUrl?.length || 0,
-          imageUrlPrefix: imageUrl ? imageUrl.substring(0, 50) + "..." : "none",
+        console.log("=".repeat(80));
+        console.log("[HISTORY DEBUG] prepareSendMessagesRequest called");
+        console.log("[HISTORY DEBUG] Convex history count:", convexHistory.length);
+        console.log("[HISTORY DEBUG] Convex history details:");
+        convexHistory.forEach((msg, idx) => {
+          console.log(`  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
         });
+        console.log("[HISTORY DEBUG] Current messages count:", currentMessages.length);
+        console.log("[HISTORY DEBUG] Current messages details:");
+        currentMessages.forEach((msg, idx) => {
+          console.log(`  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
+        });
+        console.log("[HISTORY DEBUG] Final combined messages count:", finalMessages.length);
+        console.log("[HISTORY DEBUG] Final combined messages details:");
+        finalMessages.forEach((msg, idx) => {
+          console.log(`  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
+        });
+        console.log("=".repeat(80));
 
         const requestBody = {
           messages: finalMessages,
           imageUrl: imageUrl || null,
         };
-
-        console.log("[OCR DEBUG - Frontend] Request body being sent to /api/chat:", {
-          messagesCount: requestBody.messages.length,
-          hasImageUrl: !!requestBody.imageUrl,
-          imageUrlType: requestBody.imageUrl ? "base64 DataURL" : "none",
-        });
 
         // Clear the ref after using it
         currentImageUrlRef.current = null;
@@ -165,21 +187,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
       return;
     }
 
-    console.log("[OCR DEBUG - Frontend] Image selected:", {
-      name: file.name,
-      type: file.type,
-      size: `${(file.size / 1024).toFixed(2)} KB`,
-    });
-
     setSelectedImage(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       const preview = reader.result as string;
       setImagePreview(preview);
-      console.log("[OCR DEBUG - Frontend] Image preview generated:", {
-        previewLength: preview.length,
-        previewPrefix: preview.substring(0, 50) + "...",
-      });
       // Refocus textarea after image is loaded
       textInputRef.current?.focus();
     };
@@ -224,11 +236,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
   // Upload image to Convex storage
   const uploadImage = async (file: File): Promise<Id<"_storage"> | null> => {
     try {
-      console.log("[OCR DEBUG - Frontend] Requesting upload URL from Convex...");
       const uploadUrl = await generateUploadUrl();
-      console.log("[OCR DEBUG - Frontend] Upload URL received:", uploadUrl);
-
-      console.log("[OCR DEBUG - Frontend] Uploading file to Convex storage...");
       const result = await fetch(uploadUrl, {
         method: "POST",
         headers: { "Content-Type": file.type },
@@ -236,15 +244,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
       });
 
       const { storageId } = await result.json();
-      console.log("[OCR DEBUG - Frontend] ✅ File uploaded successfully to Convex:", {
-        storageId,
-        fileType: file.type,
-        fileSize: `${(file.size / 1024).toFixed(2)} KB`,
-      });
-
       return storageId;
     } catch (error) {
-      console.error("[OCR DEBUG - Frontend] ❌ Failed to upload image:", error);
+      console.error("Failed to upload image:", error);
       return null;
     }
   };
@@ -263,85 +265,63 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
   // Expose triggerAutoSend method via ref for auto-triggering from ChatInterface
   useImperativeHandle(ref, () => ({
     triggerAutoSend: async () => {
-      console.log("[MessageInput] Auto-send triggered from ChatInterface", {
-        status,
-        hasRecentMessages: !!recentMessages,
-        recentMessagesCount: recentMessages?.length || 0,
-      });
-
       // Trigger the AI response without needing user input
       // The message is already saved in Convex, we just need to send to AI
       if (status === "ready" && recentMessages && recentMessages.length > 0) {
         const lastMessage = recentMessages[recentMessages.length - 1];
-        console.log("[MessageInput] Last message:", {
-          role: lastMessage.role,
-          content: lastMessage.content.substring(0, 50),
-          hasImage: !!lastMessage.imageStorageId,
-        });
 
         if (lastMessage.role === "user") {
-          console.log("[MessageInput] Sending last user message to AI:", lastMessage.content);
           onLoadingChange?.(true);
 
           // If the message has an image, fetch it and convert to data URL
           if (lastMessage.imageStorageId) {
             try {
-              console.log("[MessageInput] Fetching image for auto-send, storageId:", lastMessage.imageStorageId);
-
               // Get the image URL from Convex using the query
               const imageUrl = await convex.query(api.files.getImageUrl, {
                 storageId: lastMessage.imageStorageId,
               });
 
               if (!imageUrl) {
-                console.error("[MessageInput] Failed to get image URL from Convex");
+                console.error("Failed to get image URL from Convex");
                 onLoadingChange?.(false);
                 return;
               }
 
-              console.log("[MessageInput] Image URL retrieved from Convex:", imageUrl.substring(0, 50));
-
               // Fetch the image as blob
               const imageBlob = await fetch(imageUrl).then(r => r.blob());
-              console.log("[MessageInput] Image blob fetched, size:", imageBlob.size);
 
               // Convert blob to data URL
               const reader = new FileReader();
               reader.onloadend = () => {
                 const dataUrl = reader.result as string;
-                console.log("[MessageInput] Image converted to data URL for auto-send, length:", dataUrl.length);
                 currentImageUrlRef.current = dataUrl;
 
-                console.log("[MessageInput] Calling sendMessage with image...");
                 // Send message with image
                 sendMessage({
                   text: lastMessage.content,
                 });
               };
               reader.onerror = (error) => {
-                console.error("[MessageInput] FileReader error:", error);
+                console.error("FileReader error:", error);
                 onLoadingChange?.(false);
               };
               reader.readAsDataURL(imageBlob);
               return; // Exit early, the reader callback will send the message
             } catch (error) {
-              console.error("[MessageInput] Failed to fetch image for auto-send:", error);
+              console.error("Failed to fetch image for auto-send:", error);
               onLoadingChange?.(false);
               // Continue without image if fetch fails
             }
           }
 
-          console.log("[MessageInput] Calling sendMessage without image...");
           // Send message without image
           sendMessage({
             text: lastMessage.content,
           });
         } else {
-          console.log("[MessageInput] Last message is not from user, skipping auto-send");
           onLoadingChange?.(false);
         }
       } else {
-        console.log("[MessageInput] Cannot auto-send - conditions not met");
         onLoadingChange?.(false);
       }
     },
@@ -355,12 +335,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
     let imageStorageId: Id<"_storage"> | null = null;
     const currentImage = selectedImage; // Store reference before clearing
     const currentImagePreview = imagePreview; // Store preview before clearing
-
-    console.log("[OCR DEBUG - Frontend] Form submitted:", {
-      hasText: !!input.trim(),
-      hasImage: !!selectedImage,
-      messageText: userMessage,
-    });
 
     // Create optimistic message for immediate display
     const optimisticMessage = {
@@ -383,24 +357,10 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
 
     // Upload image if present (in background)
     if (currentImage) {
-      console.log("[OCR DEBUG - Frontend] Starting image upload...");
       imageStorageId = await uploadImage(currentImage);
-
-      if (imageStorageId) {
-        console.log("[OCR DEBUG - Frontend] ✅ Image uploaded, storageId will be saved to Convex");
-      } else {
-        console.error("[OCR DEBUG - Frontend] ❌ Image upload failed, storageId is null");
-      }
     }
 
     // Save user message to Convex (in background)
-    console.log("[OCR DEBUG - Frontend] Saving message to Convex:", {
-      conversationId,
-      role: "user",
-      content: userMessage,
-      imageStorageId: imageStorageId || "none",
-    });
-
     await addMessage({
       conversationId: conversationId as Id<"conversations">,
       role: "user",
@@ -408,23 +368,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
       imageStorageId: imageStorageId || undefined,
     });
 
-    console.log("[OCR DEBUG - Frontend] ✅ Message saved to Convex");
-
-    // Don't clear optimistic message yet - let it stay until streaming starts
-    // This prevents the jarring refresh when real message loads from Convex
-
     // Set the image URL in ref so prepareSendMessagesRequest can access it
     if (imageStorageId && currentImagePreview) {
       currentImageUrlRef.current = currentImagePreview;
-      console.log("[OCR DEBUG - Frontend] ✅ Image URL stored in ref for API request");
     }
 
-    console.log("[OCR DEBUG - Frontend] Sending to chat API:", {
-      text: userMessage,
-      hasImageInRef: !!currentImageUrlRef.current,
-      imageUrlLength: currentImageUrlRef.current?.length || 0,
-      imageUrlPrefix: currentImageUrlRef.current?.substring(0, 50) + "..." || "none",
+    console.log("[HISTORY DEBUG - Submit] About to call sendMessage()");
+    console.log("[HISTORY DEBUG - Submit] recentMessages state at this moment:", {
+      count: recentMessages?.length || 0,
+      messages: recentMessages?.map((msg, idx) => ({
+        index: idx,
+        role: msg.role,
+        contentPreview: msg.content.substring(0, 50) + (msg.content.length > 50 ? '...' : ''),
+      })) || [],
     });
+    console.log("[HISTORY DEBUG - Submit] Current message being sent:", userMessage);
 
     sendMessage({
       text: userMessage,

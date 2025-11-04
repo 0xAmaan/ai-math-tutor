@@ -18,8 +18,6 @@ interface MessageListProps {
 const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
   const imageUrl = useQuery(api.files.getImageUrl, { storageId });
 
-  console.log("[UI DEBUG] MessageImage render:", { storageId, hasUrl: !!imageUrl });
-
   if (!imageUrl) {
     return <div className="h-32 w-32 animate-pulse rounded bg-zinc-700" />;
   }
@@ -29,8 +27,6 @@ const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
       src={imageUrl}
       alt="Uploaded problem"
       className="mb-2 max-h-64 rounded-lg border border-zinc-700"
-      onLoad={() => console.log("[UI DEBUG] Image loaded:", storageId)}
-      onError={(e) => console.error("[UI DEBUG] Image load error:", storageId, e)}
     />
   );
 };
@@ -52,42 +48,10 @@ export const MessageList = ({
   const userInitial = user?.emailAddresses?.[0]?.emailAddress?.charAt(0).toUpperCase() || "U";
 
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    console.log("[UI DEBUG] Auto-scroll triggered:", {
-      messagesCount: messages?.length || 0,
-      streamingMessagesCount: streamingMessages?.length || 0,
-      hasMessagesEndRef: !!messagesEndRef.current,
-      hasScrollContainer: !!container,
-      scrollHeight: container?.scrollHeight,
-      clientHeight: container?.clientHeight,
-      offsetHeight: container?.offsetHeight,
-      scrollTop: container?.scrollTop,
-      canScroll: (container?.scrollHeight || 0) > (container?.clientHeight || 0),
-    });
-
     if (messagesEndRef.current) {
-      console.log("[UI DEBUG] Scrolling to bottom...");
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, streamingMessages]);
-
-  // Log dimensions on mount and when window resizes
-  useEffect(() => {
-    const logDimensions = () => {
-      const container = scrollContainerRef.current;
-      console.log("[UI DEBUG] Container dimensions:", {
-        scrollHeight: container?.scrollHeight,
-        clientHeight: container?.clientHeight,
-        offsetHeight: container?.offsetHeight,
-        computedHeight: container ? window.getComputedStyle(container).height : "N/A",
-        computedMaxHeight: container ? window.getComputedStyle(container).maxHeight : "N/A",
-      });
-    };
-
-    logDimensions();
-    window.addEventListener("resize", logDimensions);
-    return () => window.removeEventListener("resize", logDimensions);
-  }, []);
 
   // Deduplicate messages - if we have an optimistic message with same content as a real message, only show real one
   const streamingMessagesProcessed = streamingMessages.map((msg) => {
@@ -162,25 +126,10 @@ export const MessageList = ({
     );
   }
 
-  console.log("[UI DEBUG] MessageList rendering:", {
-    messagesLoaded: !!messages,
-    messagesCount: messages?.length || 0,
-    streamingMessagesCount: streamingMessages.length,
-    allMessagesCount: allMessages.length,
-  });
-
   return (
     <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto bg-zinc-900 p-6">
       <div className="mx-auto max-w-3xl">
         {allMessages.map((message, index) => {
-          console.log("[UI DEBUG] Rendering message:", {
-            index,
-            id: message.id,
-            role: message.role,
-            hasImage: !!message.imageStorageId,
-            contentLength: message.content.length,
-            isStreaming: message.isStreaming,
-          });
 
           // Determine spacing: user messages get small bottom margin, assistant messages get larger
           const nextMessage = allMessages[index + 1];
@@ -202,8 +151,8 @@ export const MessageList = ({
             >
               {message.role === "user" ? (
               <>
-                {/* User message - left aligned with sidebar background, first letter of email inside */}
-                <div className={`max-w-[80%] rounded-lg bg-zinc-950 px-4 py-3 flex gap-3 items-start ${(message as any).isOptimistic ? 'opacity-70' : ''}`}>
+                {/* User message - full width with sidebar background, first letter of email inside */}
+                <div className={`w-full rounded-lg bg-zinc-950 px-4 py-3 flex gap-3 items-start ${(message as any).isOptimistic ? 'opacity-70' : ''}`}>
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-white text-xs font-semibold">
                     {userInitial}
                   </div>
@@ -243,7 +192,7 @@ export const MessageList = ({
 
         {/* Loading indicator */}
         {isLoading && (
-          <div className="flex gap-4">
+          <div className="flex gap-4 mt-8">
             <div className="flex-1">
               <div className="flex items-center gap-2 text-zinc-400">
                 <div className="flex gap-1">

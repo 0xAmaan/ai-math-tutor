@@ -3,11 +3,23 @@
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { ConversationSidebar } from "@/components/ConversationSidebar";
 import { HomePageInput } from "@/components/HomePageInput";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
 const Home = () => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    // Initialize from localStorage if available
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebarCollapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
+
+  // Persist to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   // Cmd+. to toggle sidebar
   useKeyboardShortcut({ key: ".", metaKey: true }, () =>

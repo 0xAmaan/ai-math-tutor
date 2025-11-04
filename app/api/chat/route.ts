@@ -7,26 +7,24 @@ export const maxDuration = 30;
 export const POST = async (req: Request) => {
   const { messages, imageUrl } = await req.json();
 
-  console.log("[OCR DEBUG - API] POST /api/chat received:", {
-    messagesCount: messages.length,
-    hasImageUrl: !!imageUrl,
-    imageUrlType: imageUrl
-      ? imageUrl.startsWith("data:")
-        ? "base64 DataURL"
-        : "URL string"
-      : "none",
-    imageUrlLength: imageUrl?.length || 0,
-    imageUrlPrefix: imageUrl ? imageUrl.substring(0, 60) + "..." : "none",
+  console.log("=".repeat(80));
+  console.log("[HISTORY DEBUG - API] POST /api/chat received");
+  console.log(
+    "[HISTORY DEBUG - API] Total messages received:",
+    messages.length,
+  );
+  console.log("[HISTORY DEBUG - API] Message history:");
+  messages.forEach((msg: any, idx: number) => {
+    const contentPreview =
+      typeof msg.content === "string"
+        ? msg.content.substring(0, 100)
+        : "[multimodal content]";
+    console.log(
+      `  [${idx}] ${msg.role}: ${contentPreview}${typeof msg.content === "string" && msg.content.length > 100 ? "..." : ""}`,
+    );
   });
-
-  // Log last message to see if it should get the image
-  const lastMessage = messages[messages.length - 1];
-  console.log("[OCR DEBUG - API] Last message in history:", {
-    role: lastMessage?.role,
-    contentPreview: lastMessage?.content.substring(0, 100),
-    isUserMessage: lastMessage?.role === "user",
-    willReceiveImage: lastMessage?.role === "user" && !!imageUrl,
-  });
+  console.log("[HISTORY DEBUG - API] Has image:", !!imageUrl);
+  console.log("=".repeat(80));
 
   // Transform messages to include image if present
   const processedMessages = messages.map((msg: any) => {
@@ -36,9 +34,6 @@ export const POST = async (req: Request) => {
       imageUrl &&
       messages.indexOf(msg) === messages.length - 1
     ) {
-      console.log(
-        "[OCR DEBUG - API] ✅ Transforming last user message to include image",
-      );
       return {
         ...msg,
         content: [
@@ -56,43 +51,11 @@ export const POST = async (req: Request) => {
     return msg;
   });
 
-  console.log("[OCR DEBUG - API] Processed messages for Claude:", {
-    totalMessages: processedMessages.length,
-    lastMessageType:
-      typeof processedMessages[processedMessages.length - 1]?.content,
-    lastMessageIsMultimodal: Array.isArray(
-      processedMessages[processedMessages.length - 1]?.content,
-    ),
-  });
-
-  // Log the structure being sent to Claude
-  if (imageUrl) {
-    const lastProcessed = processedMessages[processedMessages.length - 1];
-    console.log("[OCR DEBUG - API] Last processed message structure:", {
-      role: lastProcessed.role,
-      contentType: Array.isArray(lastProcessed.content)
-        ? "array (multimodal)"
-        : "string",
-      contentParts: Array.isArray(lastProcessed.content)
-        ? lastProcessed.content.length
-        : "N/A",
-      partTypes: Array.isArray(lastProcessed.content)
-        ? lastProcessed.content.map((p: any) => p.type)
-        : "N/A",
-    });
-  }
-
-  console.log("[OCR DEBUG - API] Calling Claude Sonnet 4 with streamText...");
-
   const result = streamText({
     model: anthropic("claude-sonnet-4-20250514"),
     system: SYSTEM_PROMPT,
     messages: processedMessages,
   });
-
-  console.log(
-    "[OCR DEBUG - API] ✅ streamText initiated, returning response stream",
-  );
 
   return result.toUIMessageStreamResponse();
 };

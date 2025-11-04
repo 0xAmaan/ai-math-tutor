@@ -1,7 +1,7 @@
 "use client";
 
 import { ConversationSidebar } from "@/components/ConversationSidebar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { useUser } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
@@ -10,9 +10,21 @@ import { useRouter } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 
 const ChatsPage = () => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    // Initialize from localStorage if available
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebarCollapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
   const { user } = useUser();
   const router = useRouter();
+
+  // Persist to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   // Cmd+. to toggle sidebar
   useKeyboardShortcut(
