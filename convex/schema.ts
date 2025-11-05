@@ -14,6 +14,71 @@ export default defineSchema({
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     timestamp: v.number(),
+
+    // Image upload
     imageStorageId: v.optional(v.id("_storage")),
+
+    // Practice problems (from main branch)
+    practiceSessionId: v.optional(v.id("practiceSessions")),
+
+    // Step tracking (from main branch)
+    problemContext: v.optional(
+      v.object({
+        currentProblem: v.string(),
+        currentStep: v.number(),
+        totalSteps: v.number(),
+        problemType: v.string(),
+        stepsCompleted: v.array(v.string()),
+        currentEquation: v.optional(v.string()),
+        stepRoadmap: v.optional(v.array(v.string())),
+      }),
+    ),
+
+    // Voice features (new in voice-mode branch)
+    isVoiceMessage: v.optional(v.boolean()),
+    audioStorageId: v.optional(v.id("_storage")),
+
+    // Whiteboard features (new in voice-mode branch)
+    whiteboardSnapshot: v.optional(v.string()), // JSON of tldraw document
+    whiteboardThumbnailId: v.optional(v.id("_storage")), // PNG preview
   }).index("by_conversation", ["conversationId", "timestamp"]),
+
+  // Practice sessions table (from main branch)
+  practiceSessions: defineTable({
+    userId: v.string(),
+    conversationId: v.id("conversations"),
+    topic: v.string(),
+    difficulty: v.union(
+      v.literal("easy"),
+      v.literal("medium"),
+      v.literal("hard"),
+    ),
+    problems: v.array(
+      v.object({
+        problem: v.string(),
+        difficulty: v.union(
+          v.literal("easy"),
+          v.literal("medium"),
+          v.literal("hard"),
+        ),
+        options: v.array(
+          v.object({
+            label: v.string(),
+            value: v.string(),
+            isCorrect: v.boolean(),
+          }),
+        ),
+        explanation: v.string(),
+        studentAnswer: v.optional(v.string()),
+        attemptedAt: v.optional(v.number()),
+      }),
+    ),
+    totalProblems: v.number(),
+    currentProblemIndex: v.number(),
+    score: v.number(),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId", "createdAt"])
+    .index("by_conversation", ["conversationId"]),
 });

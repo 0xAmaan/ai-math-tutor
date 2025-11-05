@@ -9,19 +9,24 @@ import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 const ConversationPage = () => {
   const params = useParams();
   const conversationId = params.id as string;
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    // Initialize from localStorage if available
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sidebarCollapsed');
-      return saved === 'true';
-    }
-    return false;
-  });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Persist to localStorage whenever it changes
+  // Initialize from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
-    localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
-  }, [isSidebarCollapsed]);
+    setIsMounted(true);
+    const saved = localStorage.getItem('sidebarCollapsed');
+    if (saved === 'true') {
+      setIsSidebarCollapsed(true);
+    }
+  }, []);
+
+  // Persist to localStorage whenever it changes (only after mount)
+  useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
+    }
+  }, [isSidebarCollapsed, isMounted]);
 
   // Cmd+. to toggle sidebar
   useKeyboardShortcut(
