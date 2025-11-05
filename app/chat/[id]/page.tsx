@@ -10,19 +10,23 @@ const ConversationPage = () => {
   const params = useParams();
   const conversationId = params.id as string;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Load from localStorage on mount
+  // Initialize from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
+    setIsMounted(true);
     const saved = localStorage.getItem('sidebarCollapsed');
     if (saved === 'true') {
       setIsSidebarCollapsed(true);
     }
   }, []);
 
-  // Persist to localStorage whenever it changes
+  // Persist to localStorage whenever it changes (only after mount)
   useEffect(() => {
-    localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
-  }, [isSidebarCollapsed]);
+    if (isMounted) {
+      localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsed));
+    }
+  }, [isSidebarCollapsed, isMounted]);
 
   // Cmd+\ to toggle sidebar
   useKeyboardShortcut(

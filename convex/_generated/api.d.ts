@@ -12,6 +12,7 @@ import type * as conversations from "../conversations.js";
 import type * as files from "../files.js";
 import type * as messages from "../messages.js";
 import type * as practice from "../practice.js";
+import type * as whiteboard from "../whiteboard.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   files: typeof files;
   messages: typeof messages;
   practice: typeof practice;
+  whiteboard: typeof whiteboard;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 

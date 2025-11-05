@@ -7,7 +7,8 @@ import { Id } from "@/convex/_generated/dataModel";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { StepSidePanel } from "./StepSidePanel";
-import { PanelRightOpen } from "lucide-react";
+import { RealtimeVoiceMode } from "./RealtimeVoiceMode";
+import { PanelRightOpen, Mic } from "lucide-react";
 
 interface ChatInterfaceProps {
   conversationId: string | null;
@@ -17,8 +18,10 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
   const [streamingMessages, setStreamingMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
   const hasTriggeredFirstResponseRef = useRef(false);
   const messageInputRef = useRef<{ triggerAutoSend: () => void } | null>(null);
+
 
   // Query messages to detect first message scenario
   const messages = useQuery(
@@ -86,8 +89,29 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
     );
   }
 
+  // Render voice mode if active
+  if (isVoiceMode) {
+    return (
+      <RealtimeVoiceMode
+        conversationId={conversationId as Id<"conversations">}
+        onExit={() => setIsVoiceMode(false)}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full w-full flex-col relative">
+      {/* Voice Mode Toggle Button */}
+      <div className="flex justify-end border-b border-zinc-800 px-4 py-2">
+        <button
+          onClick={() => setIsVoiceMode(true)}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+        >
+          <Mic className="h-4 w-4" />
+          Voice Mode
+        </button>
+      </div>
+
       {/* Add margin-right when panel is open to keep chat centered */}
       <div
         className={`relative flex-1 transition-all duration-300 ${

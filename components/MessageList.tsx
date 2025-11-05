@@ -9,6 +9,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { useUser } from "@clerk/nextjs";
 import { PracticeCard } from "./PracticeCard";
+import { Pencil } from "lucide-react";
 
 interface MessageListProps {
   conversationId: string;
@@ -29,6 +30,28 @@ const MessageImage = ({ storageId }: { storageId: Id<"_storage"> }) => {
       alt="Uploaded problem"
       className="mb-2 max-h-64 rounded-lg border border-zinc-700"
     />
+  );
+};
+
+const WhiteboardThumbnail = ({ storageId }: { storageId: Id<"_storage"> }) => {
+  const imageUrl = useQuery(api.files.getImageUrl, { storageId });
+
+  if (!imageUrl) {
+    return <div className="h-32 w-full animate-pulse rounded bg-zinc-700" />;
+  }
+
+  return (
+    <div className="mb-2 overflow-hidden rounded-lg border border-zinc-700">
+      <div className="flex items-center gap-2 bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
+        <Pencil className="h-3 w-3" />
+        Whiteboard
+      </div>
+      <img
+        src={imageUrl}
+        alt="Whiteboard drawing"
+        className="max-h-64 w-full object-contain"
+      />
+    </div>
   );
 };
 
@@ -124,6 +147,7 @@ export const MessageList = ({
         imageStorageId: msg.imageStorageId,
         practiceSessionId: msg.practiceSessionId,
         problemContext: msg.problemContext,
+        whiteboardThumbnailId: msg.whiteboardThumbnailId,
         isStreaming: false,
         isOptimistic: false,
       })),
@@ -173,6 +197,9 @@ export const MessageList = ({
                   <div className="flex-1">
                     {message.imageStorageId && (
                       <MessageImage storageId={message.imageStorageId} />
+                    )}
+                    {(message as any).whiteboardThumbnailId && (
+                      <WhiteboardThumbnail storageId={(message as any).whiteboardThumbnailId} />
                     )}
                     <div className="prose prose-invert max-w-none prose-p:my-0 prose-p:leading-normal text-white">
                       <ReactMarkdown

@@ -14,8 +14,14 @@ export default defineSchema({
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     timestamp: v.number(),
+
+    // Image upload
     imageStorageId: v.optional(v.id("_storage")),
+
+    // Practice problems
     practiceSessionId: v.optional(v.id("practiceSessions")),
+
+    // Step tracking
     problemContext: v.optional(
       v.object({
         currentProblem: v.string(),
@@ -27,8 +33,17 @@ export default defineSchema({
         stepRoadmap: v.optional(v.array(v.string())),
       }),
     ),
+
+    // Voice features
+    isVoiceMessage: v.optional(v.boolean()),
+    audioStorageId: v.optional(v.id("_storage")),
+
+    // Whiteboard features
+    whiteboardSnapshot: v.optional(v.string()), // JSON of tldraw document
+    whiteboardThumbnailId: v.optional(v.id("_storage")), // PNG preview
   }).index("by_conversation", ["conversationId", "timestamp"]),
 
+  // Practice sessions table
   practiceSessions: defineTable({
     userId: v.string(),
     conversationId: v.id("conversations"),
