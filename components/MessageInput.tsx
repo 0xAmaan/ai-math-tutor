@@ -6,7 +6,8 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { ArrowUp, Image as ImageIcon, X } from "lucide-react";
+import { ArrowUp, Image as ImageIcon, X, FlaskConical } from "lucide-react";
+import { PracticeGeneratorInput } from "./PracticeGeneratorInput";
 
 interface MessageInputProps {
   conversationId: string;
@@ -26,6 +27,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showPracticeGenerator, setShowPracticeGenerator] = useState(false);
+  const [isGeneratingPractice, setIsGeneratingPractice] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
 
@@ -36,6 +39,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
   const addMessage = useMutation(api.messages.add);
   const updateLastActive = useMutation(api.conversations.updateLastActive);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
+  const createPracticeSession = useMutation(api.practice.createSession);
 
   const recentMessages = useQuery(api.messages.getRecent, {
     conversationId: conversationId as Id<"conversations">,
@@ -69,12 +73,28 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
           conversationId: conversationId as Id<"conversations">,
         });
 
-        // Get Convex history (previous messages)
+        // Get Convex history (previous messages) with practice session data
         const convexHistory =
-          freshMessages?.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })) || [];
+          freshMessages?.map((msg: any) => {
+            let content = msg.content;
+
+            // If message has practice session, append the data
+            if (msg.practiceSession) {
+              const session = msg.practiceSession;
+              const problemsSummary = session.problems.map((p: any, idx: number) => {
+                const answered = p.studentAnswer ? `answered ${p.studentAnswer}` : 'not answered';
+                const correct = p.studentAnswer && p.options.find((o: any) => o.label === p.studentAnswer)?.isCorrect;
+                return `  Problem ${idx + 1}: ${p.problem} (${answered}${correct !== undefined ? (correct ? ' - correct' : ' - incorrect') : ''})`;
+              }).join('\n');
+
+              content += `\n\n[Practice Session: ${session.topic}]\nScore: ${session.score}/${session.problems.filter((p: any) => p.studentAnswer).length}\n${problemsSummary}`;
+            }
+
+            return {
+              role: msg.role,
+              content,
+            };
+          }) || [];
 
         // Extract current message from sendMessage call
         const currentMessages = messages.map((msg: any) => {
@@ -327,6 +347,65 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
     },
   }), [status, recentMessages, sendMessage, onLoadingChange, convex]);
 
+  const handleGeneratePractice = async (topic: string, count: number) => {
+    try {
+      setIsGeneratingPractice(true);
+
+      // Get recent conversation context (last 5 messages)
+      const conversationContext = recentMessages?.slice(-5).map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })) || [];
+
+      // Call API to generate practice problems
+      const response = await fetch("/api/practice/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problemDescription: topic,
+          count,
+          conversationContext,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to generate practice problems");
+      }
+
+      const { problems, difficulty } = await response.json();
+
+      // Create practice session in Convex
+      const sessionId = await createPracticeSession({
+        conversationId: conversationId as Id<"conversations">,
+        topic,
+        difficulty,
+        problems,
+      });
+
+      // Add a message with the practice session
+      await addMessage({
+        conversationId: conversationId as Id<"conversations">,
+        role: "assistant",
+        content: `I've generated ${count} practice problems for you on "${topic}". Try solving them below!`,
+        practiceSessionId: sessionId,
+      });
+
+      // Update conversation last active
+      await updateLastActive({
+        conversationId: conversationId as Id<"conversations">,
+      });
+
+      // Close the generator
+      setShowPracticeGenerator(false);
+    } catch (error) {
+      console.error("Failed to generate practice problems:", error);
+      alert("Failed to generate practice problems. Please try again.");
+    } finally {
+      setIsGeneratingPractice(false);
+    }
+  };
+
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if ((!input.trim() && !selectedImage) || status !== "ready") return;
@@ -396,6 +475,16 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
 
   return (
     <div className="bg-zinc-900 p-6 shrink-0">
+      <div className="mx-auto max-w-3xl">
+        {/* Practice Generator Input */}
+        {showPracticeGenerator && (
+          <PracticeGeneratorInput
+            onGenerate={handleGeneratePractice}
+            onClose={() => setShowPracticeGenerator(false)}
+            isGenerating={isGeneratingPractice}
+          />
+        )}
+      </div>
       <form onSubmit={onSubmit} className="mx-auto max-w-3xl">
         {/* Image Preview */}
         {imagePreview && (
@@ -443,16 +532,31 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
 
           {/* Icons row */}
           <div className="flex items-center justify-between">
-            {/* Left side - image upload */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={status !== "ready"}
-              className="cursor-pointer rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Upload image"
-            >
-              <ImageIcon size={20} />
-            </button>
+            {/* Left side - image upload and practice generator */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={status !== "ready"}
+                className="cursor-pointer rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Upload image"
+              >
+                <ImageIcon size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPracticeGenerator(!showPracticeGenerator)}
+                disabled={status !== "ready" || isGeneratingPractice}
+                className={`cursor-pointer rounded-lg p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  showPracticeGenerator
+                    ? "bg-blue-500 text-white"
+                    : "text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                }`}
+                title="Generate practice problems"
+              >
+                <FlaskConical size={20} />
+              </button>
+            </div>
 
             {/* Right side - send button */}
             <button

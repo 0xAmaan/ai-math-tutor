@@ -8,6 +8,7 @@ import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { useUser } from "@clerk/nextjs";
+import { PracticeCard } from "./PracticeCard";
 
 interface MessageListProps {
   conversationId: string;
@@ -43,14 +44,23 @@ export const MessageList = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const previousMessageCountRef = useRef(0);
 
   // Get first letter of email for user avatar
   const userInitial = user?.emailAddresses?.[0]?.emailAddress?.charAt(0).toUpperCase() || "U";
 
+  // Only auto-scroll when NEW messages are added, not when existing messages update
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    const currentMessageCount = (messages?.length || 0) + streamingMessages.length;
+
+    // Only scroll if message count increased (new message added)
+    if (currentMessageCount > previousMessageCountRef.current) {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      }
     }
+
+    previousMessageCountRef.current = currentMessageCount;
   }, [messages, streamingMessages]);
 
   // Deduplicate messages - if we have an optimistic message with same content as a real message, only show real one
@@ -110,6 +120,7 @@ export const MessageList = ({
         role: msg.role,
         content: msg.content,
         imageStorageId: msg.imageStorageId,
+        practiceSessionId: msg.practiceSessionId,
         isStreaming: false,
         isOptimistic: false,
       })),
@@ -175,14 +186,19 @@ export const MessageList = ({
               <>
                 {/* Assistant message - left aligned, no background, no icon */}
                 <div className="flex-1">
-                  <div className="prose prose-invert max-w-none prose-p:my-2" style={{ lineHeight: '1.8' }}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
+                  {/* Check if this is a practice session message */}
+                  {(message as any).practiceSessionId ? (
+                    <PracticeCard sessionId={(message as any).practiceSessionId} />
+                  ) : (
+                    <div className="prose prose-invert max-w-none prose-p:my-2" style={{ lineHeight: '1.8' }}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </div>
               </>
             )}
