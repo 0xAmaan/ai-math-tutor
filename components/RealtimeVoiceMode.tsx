@@ -40,23 +40,12 @@ export const RealtimeVoiceMode = ({
   onExit,
 }: RealtimeVoiceModeProps) => {
   const [sessionState, setSessionState] = useState<SessionState>("initializing");
-  const [whiteboardBlob, setWhiteboardBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lastSentImage, setLastSentImage] = useState<string | null>(null);
 
   const sessionRef = useRef<RealtimeSession | null>(globalSession);
-  const agentRef = useRef<RealtimeAgent | null>(null);
-  const whiteboardBlobRef = useRef<Blob | null>(null);
 
   // Convex mutations
   const sendMessage = useMutation(api.messages.add);
-  const generateUploadUrl = useMutation(api.files.generateUploadUrl);
-
-  // Get recent messages for context
-  const messages = useQuery(api.messages.getRecent, {
-    conversationId,
-    limit: 15,
-  });
 
   /**
    * Initialize Realtime Agent and Session
@@ -64,9 +53,7 @@ export const RealtimeVoiceMode = ({
   useEffect(() => {
     // Check IMMEDIATELY if we should skip
     if (isGloballyInitializing || globalSession) {
-      console.log("[Realtime] Already initialized or initializing, skipping...");
       sessionRef.current = globalSession;
-      agentRef.current = globalAgent;
       if (globalSession) {
         setSessionState("idle");
       }
@@ -74,17 +61,12 @@ export const RealtimeVoiceMode = ({
     }
 
     const initializeAgent = async () => {
-      // Double-check before async work
-      if (isGloballyInitializing || globalSession) {
-        console.log("[Realtime] Race condition caught, skipping...");
-        return;
-      }
+      if (isGloballyInitializing || globalSession) return;
 
       isGloballyInitializing = true;
 
       try {
         setSessionState("initializing");
-        console.log("[Realtime] Initializing agent...");
 
         // Define whiteboard tool (injects image into conversation)
         const viewWhiteboardTool = tool({
@@ -93,34 +75,20 @@ export const RealtimeVoiceMode = ({
             "View the student's whiteboard drawing to see their work. Use this when you want to see what they've drawn or written.",
           parameters: z.object({}),
           execute: async () => {
-            console.log("[Whiteboard Tool] Tool called! Blob exists:", !!globalWhiteboardBlobRef);
             const currentBlob = globalWhiteboardBlobRef;
 
             if (!currentBlob) {
-              console.log("[Whiteboard Tool] No blob available");
               return "The whiteboard is currently empty.";
             }
 
             try {
               // Resize image to reduce size (max 512x512, JPEG compressed)
-              console.log("[Whiteboard Tool] Original blob size:", currentBlob.size, "bytes");
               const resizedBlob = await resizeImageForWebRTC(currentBlob, 512, 512);
-              console.log("[Whiteboard Tool] Resized blob size:", resizedBlob.size, "bytes");
 
               // Convert to base64
               const arrayBuffer = await resizedBlob.arrayBuffer();
               const base64 = Buffer.from(arrayBuffer).toString("base64");
               const dataUrl = `data:image/jpeg;base64,${base64}`;
-
-              console.log("[Whiteboard Tool] Base64 size:", base64.length, "chars");
-              console.log("[Whiteboard Tool] Estimated data URL size:", dataUrl.length, "chars");
-
-              // Store for visualization
-              setLastSentImage(dataUrl);
-
-              // Step 1: Call vision API to analyze the image
-              console.log("[Whiteboard Tool] Step 1: Calling vision API endpoint...");
-              console.log("[Whiteboard Tool] Data URL length:", dataUrl.length);
 
               const visionResponse = await fetch("/api/whiteboard-vision", {
                 method: "POST",
@@ -130,8 +98,6 @@ export const RealtimeVoiceMode = ({
                 body: JSON.stringify({ imageDataUrl: dataUrl }),
               });
 
-              console.log("[Whiteboard Tool] Vision API response status:", visionResponse.status);
-
               if (!visionResponse.ok) {
                 const errorText = await visionResponse.text();
                 console.error("[Whiteboard Tool] Vision API failed:", errorText);
@@ -139,41 +105,34 @@ export const RealtimeVoiceMode = ({
               }
 
               const visionData = await visionResponse.json();
-              console.log("[Whiteboard Tool] Vision API response:", visionData);
-
               const description = visionData.description;
-              console.log("[Whiteboard Tool] Step 2: Vision analysis complete");
-              console.log("[Whiteboard Tool] Description:", description);
 
-              // Step 2: Inject the description as context into the conversation
+              // Inject the description as context into the conversation
               if (!sessionRef.current) {
                 console.error("[Whiteboard Tool] No session available!");
                 return "Session not available to view whiteboard.";
               }
 
-              console.log("[Whiteboard Tool] Step 3: Injecting vision context into conversation...");
-              console.log("[Whiteboard Tool] Session object:", sessionRef.current);
-
               try {
-                // sendMessage expects content to be an array of input items
-                sessionRef.current.sendMessage({
-                  role: "user",
-                  content: [
-                    {
-                      type: "input_text",
-                      text: `[WHITEBOARD CONTENT: ${description}]`,
-                    },
-                  ],
-                });
+                // Use transport layer's sendMessage with triggerResponse: false
+                // This adds the message to conversation history without creating a new response
+                sessionRef.current.transport.sendMessage(
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "input_text",
+                        text: `[WHITEBOARD CONTENT: ${description}]`,
+                      },
+                    ],
+                  },
+                  {}, // No additional event data
+                  { triggerResponse: false }, // Don't trigger a new response
+                );
 
-                console.log("[Whiteboard Tool] Step 4: Context injected successfully!");
-                console.log("[Whiteboard Tool] Returning acknowledgment to AI...");
-
-                // Return a brief acknowledgment - the AI now has the whiteboard context
                 return "I can see your whiteboard now. Let me analyze what you've written...";
               } catch (injectError) {
                 console.error("[Whiteboard Tool] Failed to inject message:", injectError);
-                console.error("[Whiteboard Tool] Error details:", JSON.stringify(injectError, null, 2));
                 return "I saw the whiteboard but had trouble processing it.";
               }
             } catch (err) {
@@ -194,14 +153,10 @@ export const RealtimeVoiceMode = ({
           },
         });
 
-        console.log("[Realtime] Agent created with tools:", agent.tools?.map(t => t.name));
-
-        agentRef.current = agent;
         globalAgent = agent;
 
         // Get ephemeral token from backend
         setSessionState("connecting");
-        console.log("[Realtime] Fetching ephemeral token...");
 
         const tokenResponse = await fetch("/api/realtime-token", {
           method: "POST",
@@ -212,45 +167,27 @@ export const RealtimeVoiceMode = ({
         }
 
         const { apiKey } = await tokenResponse.json();
-        console.log("[Realtime] Received token:", apiKey ? "✓" : "✗", apiKey?.substring(0, 10) + "...");
 
         // Create session (automatically uses WebRTC in browser)
         const session = new RealtimeSession(agent);
         sessionRef.current = session;
-        globalSession = session; // Store globally to prevent duplicates
+        globalSession = session;
 
         // Set up event listeners
-        // Listen for tool calls specifically
-        session.on("tool_call" as any, (event: any) => {
-          console.log("[Realtime] Tool called:", event);
-        });
-
-        // Listen for all events to debug
-        (session as any).on("*", (event: any) => {
-          // Only log important events to avoid spam
-          if (event.type?.includes("tool") || event.type?.includes("function")) {
-            console.log("[Realtime] Event:", event.type, event);
-          }
-        });
-
         session.on("connected", () => {
-          console.log("[Realtime] Session connected");
           setSessionState("idle");
         });
 
         session.on("disconnected", () => {
-          console.log("[Realtime] Session disconnected");
           setSessionState("initializing");
         });
 
         // Track user speech
         session.on("input_audio_buffer.speech_started", () => {
-          console.log("[Realtime] User started speaking");
           setSessionState("listening");
         });
 
         session.on("input_audio_buffer.speech_stopped", () => {
-          console.log("[Realtime] User stopped speaking");
           setSessionState("thinking");
         });
 
@@ -262,7 +199,6 @@ export const RealtimeVoiceMode = ({
         });
 
         session.on("response.audio.done", () => {
-          console.log("[Realtime] AI finished speaking");
           setSessionState("idle");
         });
 
@@ -306,9 +242,6 @@ export const RealtimeVoiceMode = ({
         // Connect to OpenAI
         await session.connect({ apiKey });
 
-        console.log("[Realtime] Agent initialized successfully");
-
-        // Set to idle after connection succeeds
         setSessionState("idle");
         isGloballyInitializing = false;
       } catch (err) {
@@ -321,20 +254,12 @@ export const RealtimeVoiceMode = ({
     };
 
     initializeAgent();
-
-    // Cleanup on unmount - but DON'T close session (let it persist for React strict mode remount)
-    return () => {
-      console.log("[Realtime] Component unmounting (session persists)...");
-      // Only clean up on actual exit, not React strict mode remount
-    };
-  }, [conversationId, sendMessage, generateUploadUrl]);
+  }, [conversationId]);
 
   // Cleanup when actually exiting voice mode
   useEffect(() => {
     return () => {
-      // This runs when the component is truly removed (not strict mode)
       if (globalSession) {
-        console.log("[Realtime] Closing global session on exit...");
         try {
           globalSession.close();
         } catch (err) {
@@ -352,25 +277,8 @@ export const RealtimeVoiceMode = ({
    * Handle whiteboard updates
    */
   const handleWhiteboardExport = useCallback((blob: Blob | null) => {
-    console.log("[RealtimeVoiceMode] handleWhiteboardExport called");
-    console.log("[RealtimeVoiceMode] Blob received:", blob ? `${blob.size} bytes` : "null");
-    setWhiteboardBlob(blob);
-    whiteboardBlobRef.current = blob;
-    globalWhiteboardBlobRef = blob; // Update global ref for tool access
-    console.log("[RealtimeVoiceMode] Global blob ref updated:", !!globalWhiteboardBlobRef);
-    console.log("[RealtimeVoiceMode] Whiteboard blob updated:", blob ? "present" : "empty");
+    globalWhiteboardBlobRef = blob;
   }, []);
-
-  /**
-   * Manual interruption (for future skip button)
-   */
-  const handleInterrupt = useCallback(() => {
-    if (sessionRef.current && sessionState === "speaking") {
-      console.log("[Realtime] Manually interrupting AI");
-      // The Realtime API handles interruption automatically via VAD
-      // This is a placeholder for future manual controls
-    }
-  }, [sessionState]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
@@ -469,24 +377,6 @@ export const RealtimeVoiceMode = ({
             <div className="rounded-lg bg-red-500/20 border border-red-500 px-4 py-2 text-sm text-red-300">
               {error}
             </div>
-          </div>
-        )}
-
-        {/* Debug: Show last sent image */}
-        {lastSentImage && (
-          <div className="absolute top-8 right-8 z-50 bg-zinc-900/95 border border-zinc-700 rounded-lg p-3">
-            <div className="text-xs text-zinc-400 mb-2">Last image sent to AI:</div>
-            <img
-              src={lastSentImage}
-              alt="Sent to AI"
-              className="max-w-[200px] max-h-[200px] rounded border border-zinc-600"
-            />
-            <button
-              onClick={() => setLastSentImage(null)}
-              className="mt-2 text-xs text-zinc-500 hover:text-white"
-            >
-              Close
-            </button>
           </div>
         )}
       </div>
