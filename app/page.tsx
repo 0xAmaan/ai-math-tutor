@@ -21,8 +21,8 @@ const Home = () => {
     localStorage.setItem("sidebarCollapsed", String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
-  // Cmd+. to toggle sidebar
-  useKeyboardShortcut({ key: ".", metaKey: true }, () =>
+  // Cmd+\ to toggle sidebar
+  useKeyboardShortcut({ key: "\\", metaKey: true }, () =>
     setIsSidebarCollapsed((prev) => !prev),
   );
 

@@ -9,6 +9,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { useUser } from "@clerk/nextjs";
 import { PracticeCard } from "./PracticeCard";
+import { StepTracker } from "./StepTracker";
 
 interface MessageListProps {
   conversationId: string;
@@ -84,10 +85,12 @@ export const MessageList = ({
           ?.filter((part: any) => part.type === "text")
           .map((part: any) => part.text)
           .join("") || "";
+      // Strip JSON blocks from streaming content
+      const cleanedContent = textContent.replace(/```json\s*\n[\s\S]*?\n```/g, '').trim();
       return {
         id: msg.id,
         role: msg.role,
-        content: textContent,
+        content: cleanedContent,
         imageStorageId: undefined,
         isStreaming: true,
         isOptimistic: false,
@@ -121,6 +124,7 @@ export const MessageList = ({
         content: msg.content,
         imageStorageId: msg.imageStorageId,
         practiceSessionId: msg.practiceSessionId,
+        problemContext: msg.problemContext,
         isStreaming: false,
         isOptimistic: false,
       })),
@@ -190,14 +194,25 @@ export const MessageList = ({
                   {(message as any).practiceSessionId ? (
                     <PracticeCard sessionId={(message as any).practiceSessionId} />
                   ) : (
-                    <div className="prose prose-invert max-w-none prose-p:my-2" style={{ lineHeight: '1.8' }}>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                    </div>
+                    <>
+                      {/* Show step tracker if problemContext exists */}
+                      {(message as any).problemContext && (
+                        <div className="mb-4">
+                          <StepTracker
+                            problemContext={(message as any).problemContext}
+                          />
+                        </div>
+                      )}
+                      <div className="prose prose-invert max-w-none prose-p:my-2" style={{ lineHeight: '1.8' }}>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {/* Strip JSON blocks from display */}
+                          {message.content.replace(/```json\s*\n[\s\S]*?\n```/g, '').trim()}
+                        </ReactMarkdown>
+                      </div>
+                    </>
                   )}
                 </div>
               </>
