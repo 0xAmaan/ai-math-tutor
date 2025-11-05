@@ -7,6 +7,7 @@ export const add = mutation({
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     imageStorageId: v.optional(v.id("_storage")),
+    practiceSessionId: v.optional(v.id("practiceSessions")),
   },
   handler: async (ctx, args) => {
     const messageId = await ctx.db.insert("messages", {
@@ -34,6 +35,17 @@ export const getRecent = query({
       .order("desc")
       .take(limit);
 
-    return allMessages.reverse(); // Return chronological order
+    // Enrich messages with practice session data
+    const enrichedMessages = await Promise.all(
+      allMessages.map(async (msg) => {
+        if (msg.practiceSessionId) {
+          const session = await ctx.db.get(msg.practiceSessionId);
+          return { ...msg, practiceSession: session };
+        }
+        return msg;
+      }),
+    );
+
+    return enrichedMessages.reverse(); // Return chronological order
   },
 });
