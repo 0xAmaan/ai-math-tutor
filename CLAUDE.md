@@ -50,6 +50,7 @@ bun run start
 - `role` (union): "user" or "assistant"
 - `content` (string): Message text
 - `timestamp` (number): Message timestamp
+- `imageStorageId` (optional): Reference to uploaded image in Convex storage
 - Index: `by_conversation` on `[conversationId, timestamp]`
 
 ### Directory Structure
@@ -74,10 +75,14 @@ convex/
 ├── schema.ts               # Database schema definition
 ├── conversations.ts        # Conversation CRUD operations
 ├── messages.ts             # Message CRUD + getRecent query
+├── files.ts                # Image upload and storage
 └── auth.config.ts          # Clerk JWT configuration
 
 lib/
-└── prompts.ts              # System prompt for Socratic tutoring
+└── prompts.ts              # System prompt for Socratic tutoring (v2 with phases)
+
+docs/
+└── problem-testing.md      # Manual testing framework with 9 test cases
 ```
 
 ## Key Implementation Details
@@ -87,6 +92,25 @@ lib/
 2. `ConvexClientProvider` integrates Clerk's `useAuth` with Convex
 3. Convex validates Clerk JWT tokens via `auth.config.ts`
 4. All Convex queries/mutations automatically have access to authenticated user
+
+### Image Upload (File Picker, Paste, Drag & Drop)
+**Supported Methods:**
+- **File Picker**: Click image icon to select from file system
+- **Paste**: Paste image from clipboard directly into textarea
+- **Drag & Drop**: Drag image file over input area and drop (NEW in Phase 1)
+
+**Upload Flow:**
+1. User selects/pastes/drops image → preview shown
+2. Image validated (must be image/* MIME type)
+3. On send: image uploaded to Convex Storage via `generateUploadUrl()` mutation
+4. Storage ID saved in message's `imageStorageId` field
+5. Image sent to Claude Vision API as multimodal message (data URL)
+6. Claude processes both text and image content
+
+**Visual Feedback:**
+- Drag & drop: Dashed blue border + "Drop image here" overlay
+- Preview: Thumbnail with X button to remove
+- Auto-focus returns to textarea after image selection
 
 ### Message Context Management
 - Uses **sliding window**: fetches last 15 messages via `messages.getRecent()`
@@ -137,6 +161,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 - Edit `lib/prompts.ts`
 - Changes apply immediately (no restart needed)
 - Test thoroughly - prompt changes affect tutoring behavior
+- **Current version (v2)**: Includes four-phase structure (Understanding → Planning → Execution → Verification)
+- See `docs/problem-testing.md` for comprehensive test cases
 
 ### Adding UI Components
 - Create in `components/` directory
@@ -184,26 +210,68 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ## Testing Recommendations
 
-### Manual Test Cases
-1. **Linear equations**: "Help me solve 2x + 5 = 13"
-2. **Quadratic equations**: "Solve x² + 5x + 6 = 0"
-3. **Word problems**: "A train travels 120 miles in 2 hours. What's its speed?"
-4. **Geometry**: "Find the area of a circle with radius 5"
-5. **Calculus**: "What's the derivative of x²?"
+**See `docs/problem-testing.md` for complete testing framework.**
+
+### Test Categories (9 total test cases)
+1. **Simple Arithmetic** (addition, division)
+2. **Linear Equations** (two-step, with negatives)
+3. **Quadratic Equations** (factoring)
+4. **Geometry** (circle area)
+5. **Word Problems** (speed, multi-step)
+6. **Multi-Step Problems** (distribution and solving)
 
 ### Expected Behavior
 - ✅ Should ask guiding questions, not give answers
-- ✅ Should break problems into steps
-- ✅ Should use encouraging language
+- ✅ Should break problems into four phases (Understanding, Planning, Execution, Verification)
+- ✅ Should use encouraging language and celebrate progress
 - ✅ Should maintain context across 15 messages
-- ❌ Should NOT directly solve the problem
+- ✅ Should guide students to find errors themselves (not point them out)
+- ✅ Should track and communicate step progress
+- ❌ Should NOT directly solve the problem under any circumstances
 
-## Future Enhancements (Not Yet Implemented)
+### Running Tests
+1. Open `docs/problem-testing.md`
+2. For each test case, start a new conversation
+3. Submit the exact test input
+4. Evaluate response against validation criteria
+5. Document results in the "Test Results Log" section
 
-- [ ] Image upload for OCR (Claude vision API)
+## Phase 1 Enhancements (Completed)
+
+- ✅ **Drag & drop image upload** - Visual feedback with dashed border and overlay
+- ✅ **Enhanced system prompt v2** - Four-phase structure (Understanding → Planning → Execution → Verification)
+- ✅ **Comprehensive testing framework** - 9 test cases with validation criteria in `docs/problem-testing.md`
+- ✅ **Image upload** - File picker, paste, and drag & drop support with Claude Vision integration
+
+## Future Enhancements (Planned)
+
+### Phase 2: Step Visualization
+- [ ] Progress bar showing % complete
+- [ ] Collapsible step roadmap
+- [ ] Step history/replay section
+- [ ] Animated step tracking with Framer Motion
+
+### Phase 3: Interactive Whiteboard
+- [ ] Inline whiteboard mode with tldraw
+- [ ] Canvas persistence per-conversation
+- [ ] Auto-export to Claude Vision when changed
+
+### Phase 4: Practice Problems
+- [ ] Practice problem generator
+- [ ] Multiple choice interface
+- [ ] Instant feedback and explanations
+- [ ] Paginated problem sets
+
+### Phase 5: Voice Mode
+- [ ] Immersive voice tutoring mode
+- [ ] Speech-to-text (OpenAI Whisper)
+- [ ] Text-to-speech (OpenAI TTS)
+- [ ] Combined voice + whiteboard experience
+
+### Other Future Enhancements
 - [ ] KaTeX rendering for math notation
 - [ ] Auto-generate conversation titles
-- [ ] Symbolic math validation
+- [ ] Symbolic math validation (mathjs/algebrite)
 - [ ] Conversation summarization for long sessions
 - [ ] Export conversations as study notes
 - [ ] Mobile-responsive design improvements

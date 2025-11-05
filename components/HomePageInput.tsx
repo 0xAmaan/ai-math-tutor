@@ -12,6 +12,7 @@ export const HomePageInput = () => {
   const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
@@ -70,6 +71,39 @@ export const HomePageInput = () => {
         }
         break;
       }
+    }
+  };
+
+  // Handle drag and drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if we're leaving the container itself
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleImageSelect(file);
     }
   };
 
@@ -182,7 +216,22 @@ export const HomePageInput = () => {
         />
 
         {/* Input container with multi-row layout */}
-        <div className="rounded-2xl bg-zinc-800 p-4 focus-within:ring-2 focus-within:ring-blue-600">
+        <div
+          className={`rounded-2xl bg-zinc-800 p-4 focus-within:ring-2 focus-within:ring-blue-600 transition-all relative ${
+            isDragging ? "border-2 border-dashed border-blue-500 bg-blue-500/10" : ""
+          }`}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Drag overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 flex items-center justify-center bg-blue-500/20 rounded-2xl pointer-events-none z-10">
+              <p className="text-blue-400 font-medium text-lg">Drop image here</p>
+            </div>
+          )}
+
           {/* Text input row */}
           <div className="mb-3">
             <textarea
