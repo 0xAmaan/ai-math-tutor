@@ -8,6 +8,28 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { ArrowUp, Image as ImageIcon, X } from "lucide-react";
 
+// Helper function to extract problemContext from Claude's response
+const extractProblemContext = (text: string) => {
+  try {
+    const jsonBlockRegex = /```json\s*\n([\s\S]*?)\n```/g;
+    const matches = [...text.matchAll(jsonBlockRegex)];
+
+    for (const match of matches) {
+      const jsonContent = match[1].trim();
+      const parsed = JSON.parse(jsonContent);
+
+      if (parsed.problemContext) {
+        return parsed.problemContext;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[STEP TRACKING] Error parsing problemContext:", error);
+    return null;
+  }
+};
+
 interface MessageInputProps {
   conversationId: string;
   onStreamingMessages: (messages: any[]) => void;
@@ -97,17 +119,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
         console.log("=".repeat(80));
         console.log("[HISTORY DEBUG] prepareSendMessagesRequest called");
         console.log("[HISTORY DEBUG] Convex history count:", convexHistory.length);
-        console.log("[HISTORY DEBUG] Convex history details:");
-        convexHistory.forEach((msg, idx) => {
-          console.log(`  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
-        });
         console.log("[HISTORY DEBUG] Current messages count:", currentMessages.length);
-        console.log("[HISTORY DEBUG] Current messages details:");
-        currentMessages.forEach((msg, idx) => {
-          console.log(`  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
-        });
-        console.log("[HISTORY DEBUG] Final combined messages count:", finalMessages.length);
-        console.log("[HISTORY DEBUG] Final combined messages details:");
+        console.log("[HISTORY DEBUG] Final messages count:", finalMessages.length);
+        console.log("[HISTORY DEBUG] Final messages:");
         finalMessages.forEach((msg, idx) => {
           console.log(`  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}`);
         });
@@ -130,18 +144,24 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(({
       // Clear streaming messages BEFORE saving to prevent duplicate display
       onStreamingMessages([]);
 
-      // Save assistant message to Convex after streaming completes
       const textContent = message.parts
         .filter((part: { type: string; text?: string }) => part.type === "text")
         .map((part: { type: string; text?: string }) => part.text)
         .join("");
 
       if (textContent) {
+        const problemContext = extractProblemContext(textContent);
+
         await addMessage({
           conversationId: conversationId as Id<"conversations">,
           role: "assistant",
           content: textContent,
+          problemContext: problemContext || undefined,
         });
+
+        if (problemContext) {
+          console.log("[STEP TRACKING - MessageInput] Stored problemContext:", problemContext);
+        }
       }
 
       // Clear useChat internal state to prevent old messages from accumulating

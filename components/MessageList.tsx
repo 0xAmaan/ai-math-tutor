@@ -8,6 +8,7 @@ import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { useUser } from "@clerk/nextjs";
+import { StepTracker } from "./StepTracker";
 
 interface MessageListProps {
   conversationId: string;
@@ -74,10 +75,12 @@ export const MessageList = ({
           ?.filter((part: any) => part.type === "text")
           .map((part: any) => part.text)
           .join("") || "";
+      // Strip JSON blocks from streaming content
+      const cleanedContent = textContent.replace(/```json\s*\n[\s\S]*?\n```/g, '').trim();
       return {
         id: msg.id,
         role: msg.role,
-        content: textContent,
+        content: cleanedContent,
         imageStorageId: undefined,
         isStreaming: true,
         isOptimistic: false,
@@ -110,6 +113,7 @@ export const MessageList = ({
         role: msg.role,
         content: msg.content,
         imageStorageId: msg.imageStorageId,
+        problemContext: msg.problemContext,
         isStreaming: false,
         isOptimistic: false,
       })),
@@ -180,7 +184,8 @@ export const MessageList = ({
                       remarkPlugins={[remarkMath]}
                       rehypePlugins={[rehypeKatex]}
                     >
-                      {message.content}
+                      {/* Strip JSON blocks from display */}
+                      {message.content.replace(/```json\s*\n[\s\S]*?\n```/g, '').trim()}
                     </ReactMarkdown>
                   </div>
                 </div>

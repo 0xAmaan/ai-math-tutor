@@ -7,6 +7,18 @@ export const add = mutation({
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     imageStorageId: v.optional(v.id("_storage")),
+    practiceSessionId: v.optional(v.id("practiceSessions")),
+    problemContext: v.optional(
+      v.object({
+        currentProblem: v.string(),
+        currentStep: v.number(),
+        totalSteps: v.number(),
+        problemType: v.string(),
+        stepsCompleted: v.array(v.string()),
+        currentEquation: v.optional(v.string()),
+        stepRoadmap: v.optional(v.array(v.string())),
+      }),
+    ),
   },
   handler: async (ctx, args) => {
     const messageId = await ctx.db.insert("messages", {

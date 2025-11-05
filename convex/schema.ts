@@ -15,5 +15,55 @@ export default defineSchema({
     content: v.string(),
     timestamp: v.number(),
     imageStorageId: v.optional(v.id("_storage")),
+    practiceSessionId: v.optional(v.id("practiceSessions")),
+    problemContext: v.optional(
+      v.object({
+        currentProblem: v.string(),
+        currentStep: v.number(),
+        totalSteps: v.number(),
+        problemType: v.string(),
+        stepsCompleted: v.array(v.string()),
+        currentEquation: v.optional(v.string()),
+        stepRoadmap: v.optional(v.array(v.string())),
+      }),
+    ),
   }).index("by_conversation", ["conversationId", "timestamp"]),
+
+  practiceSessions: defineTable({
+    userId: v.string(),
+    conversationId: v.id("conversations"),
+    topic: v.string(),
+    difficulty: v.union(
+      v.literal("easy"),
+      v.literal("medium"),
+      v.literal("hard"),
+    ),
+    problems: v.array(
+      v.object({
+        problem: v.string(),
+        difficulty: v.union(
+          v.literal("easy"),
+          v.literal("medium"),
+          v.literal("hard"),
+        ),
+        options: v.array(
+          v.object({
+            label: v.string(),
+            value: v.string(),
+            isCorrect: v.boolean(),
+          }),
+        ),
+        explanation: v.string(),
+        studentAnswer: v.optional(v.string()),
+        attemptedAt: v.optional(v.number()),
+      }),
+    ),
+    totalProblems: v.number(),
+    currentProblemIndex: v.number(),
+    score: v.number(),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId", "createdAt"])
+    .index("by_conversation", ["conversationId"]),
 });

@@ -4,6 +4,28 @@ import { SYSTEM_PROMPT } from "@/lib/prompts";
 
 export const maxDuration = 30;
 
+// Helper function to extract problemContext from Claude's response
+const extractProblemContext = (text: string) => {
+  try {
+    const jsonBlockRegex = /```json\s*\n([\s\S]*?)\n```/g;
+    const matches = [...text.matchAll(jsonBlockRegex)];
+
+    for (const match of matches) {
+      const jsonContent = match[1].trim();
+      const parsed = JSON.parse(jsonContent);
+
+      if (parsed.problemContext) {
+        return parsed.problemContext;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[STEP TRACKING] Error parsing problemContext:", error);
+    return null;
+  }
+};
+
 export const POST = async (req: Request) => {
   const { messages, imageUrl } = await req.json();
 
@@ -55,6 +77,15 @@ export const POST = async (req: Request) => {
     model: anthropic("claude-sonnet-4-20250514"),
     system: SYSTEM_PROMPT,
     messages: processedMessages,
+    onFinish: async ({ text }) => {
+      const problemContext = extractProblemContext(text);
+      if (problemContext) {
+        console.log(
+          "[STEP TRACKING] Extracted problemContext:",
+          problemContext,
+        );
+      }
+    },
   });
 
   return result.toUIMessageStreamResponse();
