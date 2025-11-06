@@ -26,8 +26,8 @@ const Home = () => {
     }
   }, [isSidebarCollapsed, isMounted]);
 
-  // Cmd+\ to toggle sidebar
-  useKeyboardShortcut({ key: "\\", metaKey: true }, () =>
+  // Cmd+. to toggle sidebar
+  useKeyboardShortcut({ key: ".", metaKey: true }, () =>
     setIsSidebarCollapsed((prev) => !prev),
   );
 

@@ -1,0 +1,194 @@
+"use client";
+
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import dynamic from "next/dynamic";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+import { hashString, blobToDataUrl } from "@/lib/whiteboard-utils";
+import { X } from "lucide-react";
+import type { Editor } from "tldraw";
+
+// Dynamically import Tldraw to avoid SSR issues
+const Tldraw = dynamic(async () => (await import("tldraw")).Tldraw, {
+  ssr: false,
+});
+
+interface ChatWhiteboardPanelProps {
+  conversationId: string;
+  onClose: () => void;
+}
+
+export interface ChatWhiteboardPanelRef {
+  exportIfChanged: () => Promise<{ blob: Blob; dataUrl: string } | null>;
+}
+
+export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteboardPanelProps>(
+  ({ conversationId, onClose }, ref) => {
+    const [editor, setEditor] = useState<Editor | null>(null);
+    const lastSentHashRef = useRef<string | null>(null);
+    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const snapshotFromDB = useQuery(api.chatWhiteboard.getWhiteboardState, {
+      conversationId: conversationId as Id<"conversations">,
+    });
+
+    const saveSnapshotMutation = useMutation(api.chatWhiteboard.upsertWhiteboardState);
+
+    // Load snapshot from Convex on mount or when conversation changes
+    useEffect(() => {
+      if (!editor || !snapshotFromDB) return;
+
+      const loadSnapshotAsync = async () => {
+        try {
+          const parsed = JSON.parse(snapshotFromDB);
+          const { loadSnapshot } = await import("tldraw");
+          loadSnapshot(editor.store, parsed);
+        } catch (error) {
+          console.error("[ChatWhiteboard] Failed to load snapshot:", error);
+        }
+      };
+
+      loadSnapshotAsync();
+    }, [editor, snapshotFromDB, conversationId]);
+
+    // Save snapshot to Convex on change (debounced)
+    useEffect(() => {
+      if (!editor) return;
+
+      const handleChange = () => {
+        // Clear existing timeout
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+        }
+
+        // Set new timeout for debounced save
+        saveTimeoutRef.current = setTimeout(async () => {
+          try {
+            // Import getSnapshot dynamically
+            const { getSnapshot } = await import("tldraw");
+            const currentSnapshot = getSnapshot(editor.store);
+            const snapshotJson = JSON.stringify(currentSnapshot);
+
+            await saveSnapshotMutation({
+              conversationId: conversationId as Id<"conversations">,
+              snapshot: snapshotJson,
+            });
+          } catch (error) {
+            console.error("[ChatWhiteboard] Failed to save snapshot:", error);
+          }
+        }, 2000); // Save 2 seconds after last change
+      };
+
+      // Listen to store changes
+      const unsubscribe = editor.store.listen(handleChange);
+
+      return () => {
+        unsubscribe();
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+        }
+      };
+    }, [editor, conversationId, saveSnapshotMutation]);
+
+    // Expose exportIfChanged method via ref
+    useImperativeHandle(
+      ref,
+      () => ({
+        exportIfChanged: async () => {
+          if (!editor) return null;
+
+          try {
+            // Import getSnapshot dynamically
+            const { getSnapshot } = await import("tldraw");
+            const currentSnapshot = getSnapshot(editor.store);
+            const currentHash = await hashString(JSON.stringify(currentSnapshot));
+
+            // Check if whiteboard has changed since last send
+            if (currentHash === lastSentHashRef.current) {
+              return null; // No changes, don't export
+            }
+
+            // Update the last sent hash
+            lastSentHashRef.current = currentHash;
+
+            // Get all shape IDs on current page
+            const shapeIds = Array.from(editor.getCurrentPageShapeIds());
+
+            if (shapeIds.length === 0) {
+              return null; // Nothing to export
+            }
+
+            // Export as PNG
+            const result = await editor.getSvgString(shapeIds, {
+              background: true,
+              padding: 16,
+            });
+
+            if (!result) {
+              return null;
+            }
+
+            // Convert SVG to PNG blob
+            const svg = result.svg;
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            const img = new Image();
+
+            return new Promise<{ blob: Blob; dataUrl: string } | null>((resolve) => {
+              img.onload = async () => {
+                canvas.width = img.width * 2; // 2x scale for better quality
+                canvas.height = img.height * 2;
+                ctx?.scale(2, 2);
+                ctx?.drawImage(img, 0, 0);
+
+                canvas.toBlob(async (blob) => {
+                  if (!blob) {
+                    resolve(null);
+                    return;
+                  }
+
+                  const dataUrl = await blobToDataUrl(blob);
+                  resolve({ blob, dataUrl });
+                }, "image/png");
+              };
+
+              img.onerror = () => resolve(null);
+              img.src = "data:image/svg+xml;base64," + btoa(svg);
+            });
+          } catch (error) {
+            console.error("[ChatWhiteboard] Failed to export:", error);
+            return null;
+          }
+        },
+      }),
+      [editor]
+    );
+
+    return (
+      <div className="relative w-full h-[450px] border border-zinc-700 rounded-lg overflow-hidden bg-zinc-900">
+        {/* Header with close button */}
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-2 bg-zinc-800/90 backdrop-blur-sm border-b border-zinc-700">
+          <span className="text-sm font-medium text-zinc-300">Whiteboard</span>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-zinc-700 transition-colors text-zinc-400 hover:text-zinc-200"
+            aria-label="Close whiteboard"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Tldraw canvas */}
+        <div className="h-full pt-10">
+          <Tldraw
+            onMount={setEditor}
+            persistenceKey={`chat-whiteboard-${conversationId}`}
+          />
+        </div>
+      </div>
+    );
+  }
+);
+
+ChatWhiteboardPanel.displayName = "ChatWhiteboardPanel";

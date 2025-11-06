@@ -35,6 +35,7 @@ export const useKeyboardShortcut = (
         keyMatch
       ) {
         event.preventDefault();
+        event.stopPropagation();
         callback();
       }
     };

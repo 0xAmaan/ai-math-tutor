@@ -27,7 +27,7 @@ const extractProblemContext = (text: string) => {
 };
 
 export const POST = async (req: Request) => {
-  const { messages, imageUrl } = await req.json();
+  const { messages, imageUrl, whiteboardUrl } = await req.json();
 
   console.log("=".repeat(80));
   console.log("[HISTORY DEBUG - API] POST /api/chat received");
@@ -46,28 +46,44 @@ export const POST = async (req: Request) => {
     );
   });
   console.log("[HISTORY DEBUG - API] Has image:", !!imageUrl);
+  console.log("[HISTORY DEBUG - API] Has whiteboard:", !!whiteboardUrl);
   console.log("=".repeat(80));
 
-  // Transform messages to include image if present
+  // Transform messages to include image and/or whiteboard if present
   const processedMessages = messages.map((msg: any) => {
-    // If this is the last user message and we have an imageUrl, add the image
+    // If this is the last user message and we have imageUrl or whiteboardUrl, add them
     if (
       msg.role === "user" &&
-      imageUrl &&
+      (imageUrl || whiteboardUrl) &&
       messages.indexOf(msg) === messages.length - 1
     ) {
+      const content: any[] = [];
+
+      // Add image if present
+      if (imageUrl) {
+        content.push({
+          type: "image" as const,
+          image: imageUrl,
+        });
+      }
+
+      // Add whiteboard if present
+      if (whiteboardUrl) {
+        content.push({
+          type: "image" as const,
+          image: whiteboardUrl,
+        });
+      }
+
+      // Add text content
+      content.push({
+        type: "text" as const,
+        text: msg.content,
+      });
+
       return {
         ...msg,
-        content: [
-          {
-            type: "image" as const,
-            image: imageUrl,
-          },
-          {
-            type: "text" as const,
-            text: msg.content,
-          },
-        ],
+        content,
       };
     }
     return msg;

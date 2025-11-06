@@ -11,6 +11,18 @@ export const hashString = async (str: string): Promise<string> => {
 };
 
 /**
+ * Convert a Blob to a data URL (base64)
+ */
+export const blobToDataUrl = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+/**
  * Export tldraw editor content as PNG
  */
 export const exportWhiteboardAsPNG = async (

@@ -51,7 +51,7 @@ export const StepSidePanel = ({ problemContext, isOpen, onClose }: StepSidePanel
           <button
             onClick={onClose}
             className="p-1.5 rounded-md hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white cursor-pointer"
-            title="Close progress tracker"
+            title="Close progress tracker (⌘+\)"
           >
             <PanelRightClose className="w-5 h-5" />
           </button>

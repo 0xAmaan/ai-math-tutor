@@ -28,9 +28,9 @@ const ConversationPage = () => {
     }
   }, [isSidebarCollapsed, isMounted]);
 
-  // Cmd+\ to toggle sidebar
+  // Cmd+. to toggle sidebar
   useKeyboardShortcut(
-    { key: "\\", metaKey: true },
+    { key: ".", metaKey: true },
     () => setIsSidebarCollapsed((prev) => !prev)
   );
 

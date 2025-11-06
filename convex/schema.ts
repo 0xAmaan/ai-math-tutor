@@ -81,4 +81,11 @@ export default defineSchema({
   })
     .index("by_user", ["userId", "createdAt"])
     .index("by_conversation", ["conversationId"]),
+
+  // Whiteboard states for chat mode (persistent per-conversation)
+  whiteboardStates: defineTable({
+    conversationId: v.id("conversations"),
+    snapshot: v.string(), // JSON of tldraw document
+    updatedAt: v.number(),
+  }).index("by_conversation", ["conversationId"]),
 });

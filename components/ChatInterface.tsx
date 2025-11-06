@@ -17,7 +17,14 @@ interface ChatInterfaceProps {
 export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
   const [streamingMessages, setStreamingMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [isPanelOpen, setIsPanelOpen] = useState(() => {
+    // Load from localStorage on mount
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("step-panel-open");
+      return saved !== null ? saved === "true" : true; // Default to true if not set
+    }
+    return true;
+  });
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const hasTriggeredFirstResponseRef = useRef(false);
   const messageInputRef = useRef<{ triggerAutoSend: () => void } | null>(null);
@@ -59,11 +66,20 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
     hasTriggeredFirstResponseRef.current = false;
   }, [conversationId]);
 
-  // Keyboard shortcut for toggling right panel (Cmd+.)
+  // Save step panel open state to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("step-panel-open", String(isPanelOpen));
+    }
+  }, [isPanelOpen]);
+
+  // Keyboard shortcut for toggling step panel (Cmd+\)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey && e.key === '.') {
+      // ONLY respond to backslash, nothing else
+      if (e.metaKey && e.key === '\\' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
+        e.stopPropagation();
         if (latestProblemContext) {
           setIsPanelOpen((prev) => !prev);
         }
@@ -102,7 +118,7 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
   return (
     <div className="flex h-full w-full flex-col relative">
       {/* Voice Mode Toggle Button */}
-      <div className="flex justify-end border-b border-zinc-800 px-4 py-2">
+      <div className="flex justify-center border-b border-zinc-800 px-4 py-2">
         <button
           onClick={() => setIsVoiceMode(true)}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
@@ -142,7 +158,7 @@ export const ChatInterface = ({ conversationId }: ChatInterfaceProps) => {
         <button
           onClick={() => setIsPanelOpen(true)}
           className="fixed right-4 top-4 z-40 p-2 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-          title="Show progress tracker"
+          title="Show progress tracker (⌘+\)"
         >
           <PanelRightOpen className="w-5 h-5" />
         </button>

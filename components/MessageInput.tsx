@@ -12,8 +12,9 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { ArrowUp, Image as ImageIcon, X, FlaskConical } from "lucide-react";
+import { ArrowUp, Image as ImageIcon, X, FlaskConical, PenTool } from "lucide-react";
 import { PracticeGeneratorInput } from "./PracticeGeneratorInput";
+import { ChatWhiteboardPanel, ChatWhiteboardPanelRef } from "./ChatWhiteboardPanel";
 
 // Helper function to extract problemContext from Claude's response
 const extractProblemContext = (text: string) => {
@@ -55,11 +56,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const [isDragging, setIsDragging] = useState(false);
     const [showPracticeGenerator, setShowPracticeGenerator] = useState(false);
     const [isGeneratingPractice, setIsGeneratingPractice] = useState(false);
+    const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(() => {
+      // Load from localStorage on mount
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("chat-whiteboard-open");
+        return saved === "true";
+      }
+      return false;
+    });
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textInputRef = useRef<HTMLInputElement>(null);
+    const whiteboardPanelRef = useRef<ChatWhiteboardPanelRef>(null);
 
-    // Store current image URL for access in prepareSendMessagesRequest
+    // Store current image URL and whiteboard URL for access in prepareSendMessagesRequest
     const currentImageUrlRef = useRef<string | null>(null);
+    const currentWhiteboardUrlRef = useRef<string | null>(null);
 
     const convex = useConvex();
     const addMessage = useMutation(api.messages.add);
@@ -71,20 +82,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       conversationId: conversationId as Id<"conversations">,
     });
 
-    // Log recentMessages whenever it changes
-    useEffect(() => {
-      console.log("[HISTORY DEBUG - Component] recentMessages updated:", {
-        count: recentMessages?.length || 0,
-        messages:
-          recentMessages?.map((msg, idx) => ({
-            index: idx,
-            role: msg.role,
-            contentPreview:
-              msg.content.substring(0, 50) +
-              (msg.content.length > 50 ? "..." : ""),
-          })) || [],
-      });
-    }, [recentMessages]);
 
     const {
       sendMessage,
@@ -152,50 +149,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           // Combine Convex history with current user message
           const finalMessages = [...convexHistory, ...currentMessages];
 
-          // Get imageUrl from ref (set in onSubmit)
+          // Get imageUrl and whiteboardUrl from refs (set in onSubmit)
           const imageUrl = currentImageUrlRef.current;
-
-          console.log("=".repeat(80));
-          console.log("[HISTORY DEBUG] prepareSendMessagesRequest called");
-          console.log(
-            "[HISTORY DEBUG] Convex history count:",
-            convexHistory.length,
-          );
-          console.log("[HISTORY DEBUG] Convex history details:");
-          convexHistory.forEach((msg, idx) => {
-            console.log(
-              `  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? "..." : ""}`,
-            );
-          });
-          console.log(
-            "[HISTORY DEBUG] Current messages count:",
-            currentMessages.length,
-          );
-          console.log("[HISTORY DEBUG] Current messages details:");
-          currentMessages.forEach((msg, idx) => {
-            console.log(
-              `  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? "..." : ""}`,
-            );
-          });
-          console.log(
-            "[HISTORY DEBUG] Final combined messages count:",
-            finalMessages.length,
-          );
-          console.log("[HISTORY DEBUG] Final combined messages details:");
-          finalMessages.forEach((msg, idx) => {
-            console.log(
-              `  [${idx}] ${msg.role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? "..." : ""}`,
-            );
-          });
-          console.log("=".repeat(80));
+          const whiteboardUrl = currentWhiteboardUrlRef.current;
 
           const requestBody = {
             messages: finalMessages,
             imageUrl: imageUrl || null,
+            whiteboardUrl: whiteboardUrl || null,
           };
 
-          // Clear the ref after using it
+          // Clear the refs after using them
           currentImageUrlRef.current = null;
+          currentWhiteboardUrlRef.current = null;
 
           return {
             body: requestBody,
@@ -224,13 +190,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             content: textContent,
             problemContext: problemContext || undefined,
           });
-
-          if (problemContext) {
-            console.log(
-              "[STEP TRACKING - MessageInput] Stored problemContext:",
-              problemContext,
-            );
-          }
         }
 
         // Clear useChat internal state to prevent old messages from accumulating
@@ -243,12 +202,20 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       setMessages([]);
       onStreamingMessages([]);
       currentImageUrlRef.current = null;
+      currentWhiteboardUrlRef.current = null;
     }, [conversationId, setMessages, onStreamingMessages]);
 
     // Auto-focus input when conversation changes
     useEffect(() => {
       textInputRef.current?.focus();
     }, [conversationId]);
+
+    // Save whiteboard open state to localStorage
+    useEffect(() => {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("chat-whiteboard-open", String(isWhiteboardOpen));
+      }
+    }, [isWhiteboardOpen]);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -528,6 +495,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       const currentImage = selectedImage; // Store reference before clearing
       const currentImagePreview = imagePreview; // Store preview before clearing
 
+      // Export whiteboard if open and changed
+      if (isWhiteboardOpen && whiteboardPanelRef.current) {
+        try {
+          const whiteboardExport = await whiteboardPanelRef.current.exportIfChanged();
+          if (whiteboardExport) {
+            currentWhiteboardUrlRef.current = whiteboardExport.dataUrl;
+          }
+        } catch (error) {
+          console.error("[WHITEBOARD] Failed to export whiteboard:", error);
+        }
+      }
+
       // Create optimistic message for immediate display
       const optimisticMessage = {
         id: `optimistic-${Date.now()}`,
@@ -565,26 +544,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         currentImageUrlRef.current = currentImagePreview;
       }
 
-      console.log("[HISTORY DEBUG - Submit] About to call sendMessage()");
-      console.log(
-        "[HISTORY DEBUG - Submit] recentMessages state at this moment:",
-        {
-          count: recentMessages?.length || 0,
-          messages:
-            recentMessages?.map((msg, idx) => ({
-              index: idx,
-              role: msg.role,
-              contentPreview:
-                msg.content.substring(0, 50) +
-                (msg.content.length > 50 ? "..." : ""),
-            })) || [],
-        },
-      );
-      console.log(
-        "[HISTORY DEBUG - Submit] Current message being sent:",
-        userMessage,
-      );
-
       sendMessage({
         text: userMessage,
       });
@@ -605,6 +564,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               onClose={() => setShowPracticeGenerator(false)}
               isGenerating={isGeneratingPractice}
             />
+          )}
+
+          {/* Chat Whiteboard Panel */}
+          {isWhiteboardOpen && (
+            <div className="mb-4">
+              <ChatWhiteboardPanel
+                ref={whiteboardPanelRef}
+                conversationId={conversationId}
+                onClose={() => setIsWhiteboardOpen(false)}
+              />
+            </div>
           )}
         </div>
         <form onSubmit={onSubmit} className="mx-auto max-w-3xl">
@@ -673,7 +643,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
             {/* Icons row */}
             <div className="flex items-center justify-between">
-              {/* Left side - image upload and practice generator */}
+              {/* Left side - image upload, practice generator, and whiteboard */}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -698,6 +668,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                   title="Generate practice problems"
                 >
                   <FlaskConical size={20} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsWhiteboardOpen(!isWhiteboardOpen)}
+                  disabled={status !== "ready"}
+                  className={`cursor-pointer rounded-lg p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isWhiteboardOpen
+                      ? "bg-blue-500 text-white"
+                      : "text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                  }`}
+                  title="Toggle whiteboard (⌘+.)"
+                >
+                  <PenTool size={20} />
                 </button>
               </div>
 

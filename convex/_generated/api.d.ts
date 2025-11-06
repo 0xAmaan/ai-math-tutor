@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as chatWhiteboard from "../chatWhiteboard.js";
 import type * as conversations from "../conversations.js";
 import type * as files from "../files.js";
 import type * as messages from "../messages.js";
@@ -29,6 +30,7 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  chatWhiteboard: typeof chatWhiteboard;
   conversations: typeof conversations;
   files: typeof files;
   messages: typeof messages;
