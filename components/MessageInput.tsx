@@ -656,9 +656,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowPracticeGenerator(!showPracticeGenerator)
-                  }
+                  onClick={() => {
+                    setShowPracticeGenerator(!showPracticeGenerator);
+                    // Close whiteboard if opening practice generator
+                    if (!showPracticeGenerator && isWhiteboardOpen) {
+                      setIsWhiteboardOpen(false);
+                    }
+                  }}
                   disabled={status !== "ready" || isGeneratingPractice}
                   className={`cursor-pointer rounded-lg p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     showPracticeGenerator
@@ -671,7 +675,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsWhiteboardOpen(!isWhiteboardOpen)}
+                  onClick={() => {
+                    setIsWhiteboardOpen(!isWhiteboardOpen);
+                    // Close practice generator if opening whiteboard
+                    if (!isWhiteboardOpen && showPracticeGenerator) {
+                      setShowPracticeGenerator(false);
+                    }
+                  }}
                   disabled={status !== "ready"}
                   className={`cursor-pointer rounded-lg p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     isWhiteboardOpen

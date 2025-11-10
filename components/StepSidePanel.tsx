@@ -38,6 +38,10 @@ export const StepSidePanel = ({ problemContext, isOpen, onClose }: StepSidePanel
         return `Step ${i + 1}`;
       });
 
+  // Determine how many steps are actually completed
+  // If stepsCompleted has entries, that's the true completion count
+  const actualCompletedCount = stepsCompleted.length;
+
   return (
     <div
       className={`fixed right-0 top-0 h-screen bg-zinc-900 border-l border-zinc-700 shadow-2xl z-50 flex flex-col transition-all duration-300 ${
@@ -91,9 +95,10 @@ export const StepSidePanel = ({ problemContext, isOpen, onClose }: StepSidePanel
             <div className="space-y-3">
               {steps.map((step, index) => {
                 const stepNumber = index + 1;
-                const isCompleted = stepNumber < currentStep;
-                const isCurrent = stepNumber === currentStep;
-                const isPending = stepNumber > currentStep;
+                // A step is completed if it's in the stepsCompleted array (i.e., index < stepsCompleted.length)
+                const isCompleted = index < actualCompletedCount;
+                const isCurrent = stepNumber === currentStep && !isCompleted;
+                const isPending = stepNumber > currentStep && !isCompleted;
 
                 return (
                   <motion.div
