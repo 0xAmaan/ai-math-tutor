@@ -30,27 +30,3 @@ export const getImageUrl = query({
     return url;
   },
 });
-
-export const getImage = query({
-  args: { storageId: v.id("_storage") },
-  handler: async (ctx, args) => {
-    console.log(
-      "[OCR DEBUG - Convex] getImage called for storageId:",
-      args.storageId,
-    );
-    const blob = await ctx.storage.get(args.storageId);
-    if (blob) {
-      console.log(
-        "[OCR DEBUG - Convex] ✅ Image blob retrieved, size:",
-        blob.size,
-        "bytes",
-      );
-    } else {
-      console.error(
-        "[OCR DEBUG - Convex] ❌ Image blob is null for storageId:",
-        args.storageId,
-      );
-    }
-    return blob;
-  },
-});

@@ -87,40 +87,42 @@ export const MessageList = ({
   }, [messages, streamingMessages]);
 
   // Deduplicate messages - if we have an optimistic message with same content as a real message, only show real one
-  const streamingMessagesProcessed = streamingMessages.map((msg) => {
-    // Handle optimistic user messages
-    if (msg.isOptimistic) {
-      return {
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        imageStorageId: msg.imageStorageId,
-        isStreaming: false,
-        isOptimistic: true,
-      };
-    }
+  const streamingMessagesProcessed = streamingMessages
+    .map((msg) => {
+      // Handle optimistic user messages
+      if (msg.isOptimistic) {
+        return {
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          imageStorageId: msg.imageStorageId,
+          isStreaming: false,
+          isOptimistic: true,
+        };
+      }
 
-    // Handle streaming assistant messages
-    if (msg.role === "assistant") {
-      const textContent =
-        msg.parts
-          ?.filter((part: any) => part.type === "text")
-          .map((part: any) => part.text)
-          .join("") || "";
-      // Strip JSON blocks from streaming content
-      const cleanedContent = textContent.replace(/```json\s*\n[\s\S]*?\n```/g, '').trim();
-      return {
-        id: msg.id,
-        role: msg.role,
-        content: cleanedContent,
-        imageStorageId: undefined,
-        isStreaming: true,
-        isOptimistic: false,
-      };
-    }
+      // Handle streaming assistant messages
+      if (msg.role === "assistant") {
+        const textContent =
+          msg.parts
+            ?.filter((part: any) => part.type === "text")
+            .map((part: any) => part.text)
+            .join("") || "";
+        // Strip JSON blocks from streaming content
+        const cleanedContent = textContent.replace(/```json\s*\n[\s\S]*?\n```/g, '').trim();
+        return {
+          id: msg.id,
+          role: msg.role,
+          content: cleanedContent,
+          imageStorageId: undefined,
+          isStreaming: true,
+          isOptimistic: false,
+        };
+      }
 
-    return null;
-  }).filter(Boolean);
+      return null;
+    })
+    .filter((msg): msg is NonNullable<typeof msg> => msg !== null);
 
   // Check if we have an optimistic message that matches a real message
   const hasOptimisticMessage = streamingMessagesProcessed.some((msg: any) => msg.isOptimistic);
@@ -131,11 +133,12 @@ export const MessageList = ({
       msg.isOptimistic && msg.content === lastRealMessage.content
     );
 
+  const messagesArray = messages || [];
   const allMessages = [
-    ...(messages || [])
+    ...messagesArray
       .filter((msg, idx) => {
         // Filter out the last real message if we have a matching optimistic one
-        if (shouldHideLastReal && idx === messages.length - 1) {
+        if (shouldHideLastReal && idx === messagesArray.length - 1) {
           return false;
         }
         return true;
