@@ -28,6 +28,8 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
     const [editor, setEditor] = useState<Editor | null>(null);
     const lastSentHashRef = useRef<string | null>(null);
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const hasLoadedInitialSnapshotRef = useRef(false);
+    const isUserEditingRef = useRef(false);
 
     const snapshotFromDB = useQuery(api.chatWhiteboard.getWhiteboardState, {
       conversationId: conversationId as Id<"conversations">,
@@ -35,28 +37,41 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
 
     const saveSnapshotMutation = useMutation(api.chatWhiteboard.upsertWhiteboardState);
 
-    // Load snapshot from Convex on mount or when conversation changes
+    // Reset refs when conversation changes
     useEffect(() => {
-      if (!editor || !snapshotFromDB) return;
+      hasLoadedInitialSnapshotRef.current = false;
+      isUserEditingRef.current = false;
+      lastSentHashRef.current = null;
+    }, [conversationId]);
+
+    // Load snapshot from Convex ONLY on initial mount (not on every DB update)
+    useEffect(() => {
+      if (!editor || !snapshotFromDB || hasLoadedInitialSnapshotRef.current) return;
 
       const loadSnapshotAsync = async () => {
         try {
           const parsed = JSON.parse(snapshotFromDB);
           const { loadSnapshot } = await import("tldraw");
           loadSnapshot(editor.store, parsed);
+          hasLoadedInitialSnapshotRef.current = true;
+          console.log("[ChatWhiteboard] Initial snapshot loaded");
         } catch (error) {
           console.error("[ChatWhiteboard] Failed to load snapshot:", error);
+          hasLoadedInitialSnapshotRef.current = true; // Mark as attempted even if failed
         }
       };
 
       loadSnapshotAsync();
-    }, [editor, snapshotFromDB, conversationId]);
+    }, [editor, snapshotFromDB]);
 
     // Save snapshot to Convex on change (debounced)
     useEffect(() => {
       if (!editor) return;
 
       const handleChange = () => {
+        // Mark that user is actively editing
+        isUserEditingRef.current = true;
+
         // Clear existing timeout
         if (saveTimeoutRef.current) {
           clearTimeout(saveTimeoutRef.current);
@@ -74,8 +89,14 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
               conversationId: conversationId as Id<"conversations">,
               snapshot: snapshotJson,
             });
+
+            console.log("[ChatWhiteboard] Snapshot saved to Convex");
+
+            // Reset editing flag after save completes
+            isUserEditingRef.current = false;
           } catch (error) {
             console.error("[ChatWhiteboard] Failed to save snapshot:", error);
+            isUserEditingRef.current = false;
           }
         }, 2000); // Save 2 seconds after last change
       };
@@ -183,7 +204,8 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
         <div className="h-full pt-10">
           <Tldraw
             onMount={setEditor}
-            persistenceKey={`chat-whiteboard-${conversationId}`}
+            // Remove persistenceKey to avoid dual persistence conflict
+            // We're handling persistence via Convex instead of localStorage
           />
         </div>
       </div>
