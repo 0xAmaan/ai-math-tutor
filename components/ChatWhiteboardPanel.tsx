@@ -30,6 +30,7 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const hasLoadedInitialSnapshotRef = useRef(false);
     const isUserEditingRef = useRef(false);
+    const isSavingRef = useRef(false);
 
     const snapshotFromDB = useQuery(api.chatWhiteboard.getWhiteboardState, {
       conversationId: conversationId as Id<"conversations">,
@@ -42,11 +43,14 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
       hasLoadedInitialSnapshotRef.current = false;
       isUserEditingRef.current = false;
       lastSentHashRef.current = null;
+      isSavingRef.current = false;
+      setEditor(null); // Force editor reset on conversation change
     }, [conversationId]);
 
     // Load snapshot from Convex ONLY on initial mount (not on every DB update)
     useEffect(() => {
-      if (!editor || !snapshotFromDB || hasLoadedInitialSnapshotRef.current) return;
+      // CRITICAL: Only load if we haven't loaded before AND we're not currently editing/saving
+      if (!editor || !snapshotFromDB || hasLoadedInitialSnapshotRef.current || isUserEditingRef.current || isSavingRef.current) return;
 
       const loadSnapshotAsync = async () => {
         try {
@@ -80,6 +84,9 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
         // Set new timeout for debounced save
         saveTimeoutRef.current = setTimeout(async () => {
           try {
+            // Set saving flag to prevent reload during save
+            isSavingRef.current = true;
+
             // Import getSnapshot dynamically
             const { getSnapshot } = await import("tldraw");
             const currentSnapshot = getSnapshot(editor.store);
@@ -92,11 +99,13 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
 
             console.log("[ChatWhiteboard] Snapshot saved to Convex");
 
-            // Reset editing flag after save completes
+            // Reset flags after save completes
             isUserEditingRef.current = false;
+            isSavingRef.current = false;
           } catch (error) {
             console.error("[ChatWhiteboard] Failed to save snapshot:", error);
             isUserEditingRef.current = false;
+            isSavingRef.current = false;
           }
         }, 2000); // Save 2 seconds after last change
       };
@@ -203,6 +212,7 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
         {/* Tldraw canvas */}
         <div className="h-full pt-10">
           <Tldraw
+            key={conversationId} // Stable key tied to conversation prevents unwanted remounts
             onMount={setEditor}
             // Remove persistenceKey to avoid dual persistence conflict
             // We're handling persistence via Convex instead of localStorage
