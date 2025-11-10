@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle, memo } from "react";
 import dynamic from "next/dynamic";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -10,8 +10,14 @@ import { X } from "lucide-react";
 import type { Editor } from "tldraw";
 
 // Dynamically import Tldraw to avoid SSR issues
+// IMPORTANT: This must be outside the component to avoid recreating on every render
 const Tldraw = dynamic(async () => (await import("tldraw")).Tldraw, {
   ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center text-zinc-500">
+      Loading whiteboard...
+    </div>
+  ),
 });
 
 interface ChatWhiteboardPanelProps {
@@ -32,9 +38,18 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
     const isUserEditingRef = useRef(false);
     const isSavingRef = useRef(false);
 
+    // Store the initial snapshot in a ref to prevent re-renders from query updates
+    const initialSnapshotRef = useRef<string | null>(null);
+
     const snapshotFromDB = useQuery(api.chatWhiteboard.getWhiteboardState, {
       conversationId: conversationId as Id<"conversations">,
     });
+
+    // Store the first snapshot we receive, ignore subsequent updates
+    // This prevents the Convex query update cycle from triggering re-renders
+    if (snapshotFromDB && !initialSnapshotRef.current && !hasLoadedInitialSnapshotRef.current) {
+      initialSnapshotRef.current = snapshotFromDB;
+    }
 
     const saveSnapshotMutation = useMutation(api.chatWhiteboard.upsertWhiteboardState);
 
@@ -44,17 +59,18 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
       isUserEditingRef.current = false;
       lastSentHashRef.current = null;
       isSavingRef.current = false;
+      initialSnapshotRef.current = null;
       setEditor(null); // Force editor reset on conversation change
     }, [conversationId]);
 
     // Load snapshot from Convex ONLY on initial mount (not on every DB update)
     useEffect(() => {
-      // CRITICAL: Only load if we haven't loaded before AND we're not currently editing/saving
-      if (!editor || !snapshotFromDB || hasLoadedInitialSnapshotRef.current || isUserEditingRef.current || isSavingRef.current) return;
+      // CRITICAL: Use initialSnapshotRef instead of snapshotFromDB to prevent re-loading on updates
+      if (!editor || !initialSnapshotRef.current || hasLoadedInitialSnapshotRef.current) return;
 
       const loadSnapshotAsync = async () => {
         try {
-          const parsed = JSON.parse(snapshotFromDB);
+          const parsed = JSON.parse(initialSnapshotRef.current!);
           const { loadSnapshot } = await import("tldraw");
           loadSnapshot(editor.store, parsed);
           hasLoadedInitialSnapshotRef.current = true;
@@ -66,7 +82,9 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
       };
 
       loadSnapshotAsync();
-    }, [editor, snapshotFromDB]);
+      // IMPORTANT: Only depend on editor, NOT snapshotFromDB
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editor]);
 
     // Save snapshot to Convex on change (debounced)
     useEffect(() => {
