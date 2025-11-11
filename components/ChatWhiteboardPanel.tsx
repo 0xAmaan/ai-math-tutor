@@ -280,12 +280,6 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
               });
               setEditor(mountedEditor);
             }}
-            onError={(error) => {
-              console.error("[ChatWhiteboardPanel] Tldraw error:", error, {
-                conversationId,
-                hasLicenseKey: !!process.env.NEXT_PUBLIC_TLDRAW_LICENSE,
-              });
-            }}
             // Remove persistenceKey to avoid dual persistence conflict
             // We're handling persistence via Convex instead of localStorage
           />

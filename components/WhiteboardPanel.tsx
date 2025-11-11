@@ -153,9 +153,6 @@ export const WhiteboardPanel = ({
           });
           setEditor(mountedEditor);
         }}
-        onError={(error) => {
-          console.error("[WhiteboardPanel] Tldraw error:", error);
-        }}
       />
     </div>
   );
