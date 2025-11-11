@@ -41,6 +41,27 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
     // Store the initial snapshot in a ref to prevent re-renders from query updates
     const initialSnapshotRef = useRef<string | null>(null);
 
+    // Debug: Log license key status on mount
+    useEffect(() => {
+      const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE;
+      const env = process.env.NODE_ENV;
+      console.log("[ChatWhiteboardPanel] Component mounted", {
+        hasLicenseKey: !!licenseKey,
+        licenseKeyLength: licenseKey?.length || 0,
+        licenseKeyPrefix: licenseKey?.substring(0, 10) || "N/A",
+        environment: env,
+        conversationId,
+      });
+      
+      if (!licenseKey) {
+        console.warn("[ChatWhiteboardPanel] ⚠️ TLDRAW_LICENSE key is missing! Whiteboard may not work in production.");
+      }
+
+      return () => {
+        console.log("[ChatWhiteboardPanel] Component unmounting");
+      };
+    }, [conversationId]);
+
     const snapshotFromDB = useQuery(api.chatWhiteboard.getWhiteboardState, {
       conversationId: conversationId as Id<"conversations">,
     });
@@ -52,6 +73,24 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
     }
 
     const saveSnapshotMutation = useMutation(api.chatWhiteboard.upsertWhiteboardState);
+
+    // Debug: Track editor state changes
+    useEffect(() => {
+      console.log("[ChatWhiteboardPanel] Editor state changed", {
+        hasEditor: !!editor,
+        editorType: editor?.constructor?.name,
+        conversationId,
+      });
+      
+      // Warn if editor becomes null unexpectedly
+      if (editor === null && hasLoadedInitialSnapshotRef.current) {
+        console.warn("[ChatWhiteboardPanel] ⚠️ Editor became null after initialization!", {
+          conversationId,
+          isUserEditing: isUserEditingRef.current,
+          isSaving: isSavingRef.current,
+        });
+      }
+    }, [editor, conversationId]);
 
     // Reset refs when conversation changes
     useEffect(() => {
@@ -231,7 +270,22 @@ export const ChatWhiteboardPanel = forwardRef<ChatWhiteboardPanelRef, ChatWhiteb
         <div className="h-full pt-10">
           <Tldraw
             key={conversationId} // Stable key tied to conversation prevents unwanted remounts
-            onMount={setEditor}
+            licenseKey={process.env.NEXT_PUBLIC_TLDRAW_LICENSE}
+            onMount={(mountedEditor) => {
+              console.log("[ChatWhiteboardPanel] Tldraw editor mounted successfully", {
+                hasEditor: !!mountedEditor,
+                editorType: mountedEditor?.constructor?.name,
+                licenseKeyProvided: !!process.env.NEXT_PUBLIC_TLDRAW_LICENSE,
+                conversationId,
+              });
+              setEditor(mountedEditor);
+            }}
+            onError={(error) => {
+              console.error("[ChatWhiteboardPanel] Tldraw error:", error, {
+                conversationId,
+                hasLicenseKey: !!process.env.NEXT_PUBLIC_TLDRAW_LICENSE,
+              });
+            }}
             // Remove persistenceKey to avoid dual persistence conflict
             // We're handling persistence via Convex instead of localStorage
           />
